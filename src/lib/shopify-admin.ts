@@ -4,7 +4,12 @@
 
 const ADMIN_API_VERSION = "2026-07";
 
-const tokenCache = new Map<string, string>();
+type CachedAccessToken = {
+  accessToken: string;
+  expiresAt: number;
+};
+
+const tokenCache = new Map<string, CachedAccessToken>();
 
 function requireEnv(name: "SHOPIFY_API_KEY" | "SHOPIFY_API_SECRET") {
   const value = process.env[name];
@@ -16,7 +21,10 @@ function requireEnv(name: "SHOPIFY_API_KEY" | "SHOPIFY_API_SECRET") {
  * Checks a webhook's X-Shopify-Hmac-Sha256 header against the raw request body.
  * `crypto.subtle.verify` compares in constant time.
  */
-export async function verifyWebhookHmac(rawBody: ArrayBuffer, hmacHeader: string | null): Promise<boolean> {
+export async function verifyWebhookHmac(
+  rawBody: ArrayBuffer,
+  hmacHeader: string | null,
+): Promise<boolean> {
   if (!hmacHeader) return false;
   const key = await crypto.subtle.importKey(
     "raw",
@@ -67,24 +75,34 @@ export async function verifySessionToken(idToken: string): Promise<string> {
   return shop;
 }
 
-async function exchangeForAccessToken(shop: string, idToken: string): Promise<string> {
+async function exchangeForAccessToken(shop: string, idToken: string): Promise<CachedAccessToken> {
+  const body = new URLSearchParams({
+    client_id: requireEnv("SHOPIFY_API_KEY"),
+    client_secret: requireEnv("SHOPIFY_API_SECRET"),
+    grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+    subject_token: idToken,
+    subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+    requested_token_type: "urn:shopify:params:oauth:token-type:offline-access-token",
+    expiring: "1",
+  });
   const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      client_id: requireEnv("SHOPIFY_API_KEY"),
-      client_secret: requireEnv("SHOPIFY_API_SECRET"),
-      grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-      subject_token: idToken,
-      subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-      requested_token_type: "urn:shopify:params:oauth:token-type:offline-access-token",
-    }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body,
   });
   if (!response.ok)
     throw new Error(`Token exchange failed (${response.status}): ${await response.text()}`);
-  const { access_token } = (await response.json()) as { access_token?: string };
+  const { access_token, expires_in } = (await response.json()) as {
+    access_token?: string;
+    expires_in?: number;
+  };
   if (!access_token) throw new Error("Token exchange returned no access token");
-  return access_token;
+  if (!expires_in) throw new Error("Token exchange returned a non-expiring access token");
+  return {
+    accessToken: access_token,
+    // Renew a little early so a token cannot expire while a request is in flight.
+    expiresAt: Date.now() + Math.max(0, expires_in - 60) * 1000,
+  };
 }
 
 export interface AdminClient {
@@ -101,21 +119,29 @@ export async function adminClientFromSessionToken(idToken: string): Promise<Admi
     variables: Record<string, unknown>,
     retry: boolean,
   ): Promise<T> => {
-    let accessToken = tokenCache.get(shop);
-    if (!accessToken) {
-      accessToken = await exchangeForAccessToken(shop, idToken);
-      tokenCache.set(shop, accessToken);
+    let cached = tokenCache.get(shop);
+    if (!cached || cached.expiresAt <= Date.now()) {
+      cached = await exchangeForAccessToken(shop, idToken);
+      tokenCache.set(shop, cached);
     }
     const response = await fetch(`https://${shop}/admin/api/${ADMIN_API_VERSION}/graphql.json`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": cached.accessToken,
+      },
       body: JSON.stringify({ query, variables }),
     });
-    if (response.status === 401 && retry) {
+    if ((response.status === 401 || response.status === 403) && retry) {
       tokenCache.delete(shop);
       return request<T>(query, variables, false);
     }
-    if (!response.ok) throw new Error(`Admin API request failed (${response.status})`);
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 500);
+      throw new Error(
+        `Admin API request failed (${response.status})${detail ? `: ${detail}` : ""}`,
+      );
+    }
     const payload = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
     if (payload.errors?.length)
       throw new Error(payload.errors.map((error) => error.message).join(", "));
