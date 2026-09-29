@@ -18,9 +18,9 @@ api_version = "2026-07"
   uri = "/webhooks/compliance"
 
 [access_scopes]
-# write_files: upload cursor images to Shopify Files. The cursor config metafield lives on
-# the app's own installation, which needs no extra scope.
-scopes = "write_files"
+# read_files and write_files: list, upload, and remove cursor images in Shopify Files.
+# The cursor config metafield lives on the app's own installation and needs no extra scope.
+scopes = "read_files,write_files"
 
 [auth]
 redirect_urls = [ "https://cursorforge-two.vercel.app/api/auth" ]
