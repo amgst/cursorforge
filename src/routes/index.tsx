@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { CloudUpload, LoaderCircle, Pencil, Upload, X } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { CloudUpload, LoaderCircle, Pencil, ShieldCheck, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { DrawPad } from "@/components/draw-pad";
@@ -249,7 +249,7 @@ function CursorStudio() {
     <input ref={uploadRef} type="file" accept="image/png,image/gif,image/svg+xml" className="hidden" onChange={(event) => { handleUpload(event.target.files?.[0]); event.target.value = ""; }} />
     <header className="flex h-14 items-center gap-4 border-b border-border bg-panel/95 px-3 sm:px-4">
       <div className="flex shrink-0 items-center gap-2.5"><div className="relative grid size-8 place-items-center rounded-md bg-primary"><span className="cursor-mark" /></div><div className="leading-none"><div className="text-sm font-semibold">CursorForge</div><div className="mt-1 hidden font-mono text-[9px] uppercase text-muted-foreground sm:block">Precision cursor studio</div></div></div>
-      <div className="ml-auto flex items-center gap-3"><span className="hidden sm:inline"><PublishStatus status={status}/></span><PublishButton publishing={publishing} onPublish={publishToStore}/></div>
+      <div className="ml-auto flex items-center gap-3"><Link to="/privacy" title="Privacy policy" aria-label="Privacy policy" className="inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-panel-raised hover:text-foreground"><ShieldCheck size={15}/><span className="hidden md:inline">Privacy</span></Link><span className="hidden sm:inline"><PublishStatus status={status}/></span><PublishButton publishing={publishing} onPublish={publishToStore}/></div>
     </header>
 
     <div className="grid min-h-[calc(100vh-3.5rem)] grid-cols-1 lg:grid-cols-[192px_minmax(0,1fr)_256px]">
