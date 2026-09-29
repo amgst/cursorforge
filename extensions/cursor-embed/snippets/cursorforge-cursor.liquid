@@ -1,0 +1,28 @@
+{% doc %}
+  Outputs the `url(...) x y` part of a CSS cursor value for one saved CursorForge design,
+  or nothing when the design has no image or SVG. Callers append the fallback keyword.
+
+  @param {object} design - A design from the cursorforge.config metafield (size, hotspot_x, hotspot_y, image_url, svg)
+
+  @example
+  {% render 'cursorforge-cursor', design: saved %}
+{% enddoc %}
+{%- liquid
+  assign size = design.size | default: 32
+  assign hotspot_x = design.hotspot_x | default: 0 | at_most: size
+  assign hotspot_y = design.hotspot_y | default: 0 | at_most: size
+  assign src = design.image_url
+
+  if src != blank
+    unless src contains '.svg'
+      if src contains '?'
+        assign src = src | append: '&width=' | append: size | append: '&height=' | append: size
+      else
+        assign src = src | append: '?width=' | append: size | append: '&height=' | append: size
+      endif
+    endunless
+  elsif design.svg != blank
+    assign src = design.svg | base64_encode | prepend: 'data:image/svg+xml;base64,'
+  endif
+-%}
+{%- if src != blank -%}url("{{ src }}") {{ hotspot_x }} {{ hotspot_y }}{%- endif -%}

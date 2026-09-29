@@ -1,8 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "680bd1a6f9514ace5e463078a56e8ce0"
-name = "cursorfiy"
-application_url = "https://example.com"
+client_id = "d5916a31a775379272cc4974e38df49b"
+name = "CursorForge"
+application_url = "https://cursorforge-two.vercel.app"
 embedded = true
 
 [build]
@@ -12,40 +12,15 @@ include_config_on_deploy = true
 [webhooks]
 api_version = "2026-07"
 
+  # Mandatory privacy webhooks for App Store apps; handled in src/routes/webhooks.compliance.ts.
   [[webhooks.subscriptions]]
-  topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app/scopes_update" ]
-  uri = "/webhooks/app/scopes_update"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/compliance"
 
 [access_scopes]
-scopes = "write_products,write_metaobjects,write_metaobject_definitions"
+# write_files: upload cursor images to Shopify Files. The cursor config metafield lives on
+# the app's own installation, which needs no extra scope.
+scopes = "write_files"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
-
-[product.metafields.app.demo_info]
-type = "single_line_text_field"
-name = "Demo Source Info"
-description = "Tracks products created by the Shopify app template for development"
-
-  [product.metafields.app.demo_info.access]
-  admin = "merchant_read_write"
-
-[metaobjects.app.example]
-name = "Example"
-description = "An example metaobject definition created by this template"
-
-  [metaobjects.app.example.access]
-  admin = "merchant_read_write"
-
-[metaobjects.app.example.fields.title]
-name = "Title"
-type = "single_line_text_field"
-required = true
-
-[metaobjects.app.example.fields.description]
-name = "Description"
-type = "multi_line_text_field"
+redirect_urls = [ "https://cursorforge-two.vercel.app/api/auth" ]

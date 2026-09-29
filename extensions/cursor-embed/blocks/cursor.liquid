@@ -1,0 +1,163 @@
+{%- liquid
+  assign saved = app.metafields.cursorforge.config.value
+
+  assign size = 32
+  assign hotspot_x = 4
+  assign hotspot_y = 2
+  assign arrow_color = '#f4511e'
+  assign outline = 3
+  assign shadow = false
+  assign trail = false
+  assign trail_length = 8
+  assign trail_style = 'dots'
+  assign trail_size = 6
+  assign trail_color = ''
+  assign default_cursor = ''
+
+  if saved.size > 0
+    assign size = saved.size
+    assign hotspot_x = saved.hotspot_x | at_most: size
+    assign hotspot_y = saved.hotspot_y | at_most: size
+    assign arrow_color = saved.color
+    assign outline = saved.outline
+    assign shadow = saved.shadow
+    assign trail = saved.trail_enabled
+    assign trail_length = saved.trail_length
+    if saved.trail_style != blank
+      assign trail_style = saved.trail_style
+    endif
+    if saved.trail_size > 0
+      assign trail_size = saved.trail_size
+    endif
+    assign trail_color = saved.trail_color
+    capture default_cursor
+      render 'cursorforge-cursor', design: saved
+    endcapture
+  endif
+
+  if default_cursor == blank
+    assign arrow_fill = arrow_color | replace: '#', '%23'
+    capture default_cursor
+      echo 'url("'
+      echo "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='"
+      echo size
+      echo "' height='"
+      echo size
+      echo "' viewBox='0 0 64 64'>"
+      if shadow
+        echo "<defs><filter id='s' x='-20%' y='-20%' width='160%' height='160%'><feDropShadow dx='1' dy='2' stdDeviation='1.5' flood-opacity='0.4'/></filter></defs>"
+      endif
+      echo "<path d='M8 4 52 36 30 39 20 58Z' fill='"
+      echo arrow_fill
+      echo "' stroke='white' stroke-width='"
+      echo outline
+      echo "' stroke-linejoin='round'"
+      if shadow
+        echo " filter='url(%23s)'"
+      endif
+      echo "/></svg>"
+      echo '") '
+      echo hotspot_x
+      echo " "
+      echo hotspot_y
+    endcapture
+  endif
+
+  assign pointer_mode = saved.states.pointer.mode | default: 'match'
+  assign text_mode = saved.states.text.mode | default: 'system'
+  assign loading_mode = saved.states.loading.mode | default: 'system'
+
+  case pointer_mode
+    when 'system'
+      assign pointer_cursor = 'pointer'
+    when 'custom'
+      capture pointer_image
+        render 'cursorforge-cursor', design: saved.states.pointer.design
+      endcapture
+      if pointer_image == blank
+        assign pointer_cursor = 'pointer'
+      else
+        assign pointer_cursor = pointer_image | append: ', pointer'
+      endif
+    else
+      assign pointer_cursor = default_cursor | append: ', pointer'
+  endcase
+
+  case text_mode
+    when 'match'
+      assign text_cursor = default_cursor | append: ', text'
+    when 'custom'
+      capture text_image
+        render 'cursorforge-cursor', design: saved.states.text.design
+      endcapture
+      if text_image == blank
+        assign text_cursor = 'text'
+      else
+        assign text_cursor = text_image | append: ', text'
+      endif
+    else
+      assign text_cursor = 'text'
+  endcase
+
+  case loading_mode
+    when 'match'
+      assign loading_cursor = default_cursor | append: ', progress'
+    when 'custom'
+      capture loading_image
+        render 'cursorforge-cursor', design: saved.states.loading.design
+      endcapture
+      if loading_image == blank
+        assign loading_cursor = 'progress'
+      else
+        assign loading_cursor = loading_image | append: ', progress'
+      endif
+    else
+      assign loading_cursor = 'progress'
+  endcase
+-%}
+
+<style>
+  @media (pointer: fine) {
+    html, body, body * {
+      cursor: {{ default_cursor }}, auto !important;
+    }
+    input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="image"]), textarea, [contenteditable="true"] {
+      cursor: {{ text_cursor }} !important;
+    }
+    a, button, summary, label, select, [role="button"], input[type="submit"], input[type="button"], input[type="reset"], input[type="checkbox"], input[type="radio"] {
+      cursor: {{ pointer_cursor }} !important;
+    }
+    html.cursorforge-busy, html.cursorforge-busy *, [aria-busy="true"], [aria-busy="true"] * {
+      cursor: {{ loading_cursor }} !important;
+    }
+  }
+</style>
+<script>
+  addEventListener('beforeunload', function () { document.documentElement.classList.add('cursorforge-busy'); });
+  addEventListener('pageshow', function () { document.documentElement.classList.remove('cursorforge-busy'); });
+</script>
+
+{%- if trail -%}
+  <div
+    id="cursorforge-trail"
+    hidden
+    data-style="{{ trail_style }}"
+    data-color="{{ trail_color | default: arrow_color }}"
+    data-length="{{ trail_length }}"
+    data-size="{{ trail_size }}"
+  ></div>
+  <script src="{{ 'cursorforge-trail.js' | asset_url }}" defer></script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "CursorForge cursor",
+  "target": "body",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Design and publish your cursor in the CursorForge app (Apps → CursorForge). Until you publish one, a built-in arrow is shown."
+    }
+  ]
+}
+{% endschema %}

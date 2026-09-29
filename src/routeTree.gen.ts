@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductHandleRouteImport } from './routes/product.$handle'
+import { Route as WebhooksComplianceRouteImport } from './routes/webhooks.compliance'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +23,40 @@ const ProductHandleRoute = ProductHandleRouteImport.update({
   path: '/product/$handle',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WebhooksComplianceRoute = WebhooksComplianceRouteImport.update({
+  id: '/webhooks/compliance',
+  path: '/webhooks/compliance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/product/$handle': typeof ProductHandleRoute
+  '/webhooks/compliance': typeof WebhooksComplianceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/product/$handle': typeof ProductHandleRoute
+  '/webhooks/compliance': typeof WebhooksComplianceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/product/$handle': typeof ProductHandleRoute
+  '/webhooks/compliance': typeof WebhooksComplianceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/product/$handle'
+  fullPaths: '/' | '/product/$handle' | '/webhooks/compliance'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/product/$handle'
-  id: '__root__' | '/' | '/product/$handle'
+  to: '/' | '/product/$handle' | '/webhooks/compliance'
+  id: '__root__' | '/' | '/product/$handle' | '/webhooks/compliance'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProductHandleRoute: typeof ProductHandleRoute
+  WebhooksComplianceRoute: typeof WebhooksComplianceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +75,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductHandleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/webhooks/compliance': {
+      id: '/webhooks/compliance'
+      path: '/webhooks/compliance'
+      fullPath: '/webhooks/compliance'
+      preLoaderRoute: typeof WebhooksComplianceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProductHandleRoute: ProductHandleRoute,
+  WebhooksComplianceRoute: WebhooksComplianceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

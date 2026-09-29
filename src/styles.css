@@ -178,3 +178,11 @@
 @keyframes cursor-pulse { 50% { transform: scale(1.08); } }
 .cursor-pulse { animation: cursor-pulse 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .cursor-pulse { animation: none; } }
+.draw-pad-canvas {
+  image-rendering: pixelated;
+  cursor: crosshair;
+  background:
+    linear-gradient(to right, oklch(1 0 0 / 7%) 1px, transparent 1px) 0 0 / calc(100% / 32) calc(100% / 32),
+    linear-gradient(to bottom, oklch(1 0 0 / 7%) 1px, transparent 1px) 0 0 / calc(100% / 32) calc(100% / 32),
+    repeating-conic-gradient(oklch(0.3 0.01 275) 0 25%, oklch(0.26 0.01 275) 0 50%) 0 0 / calc(100% / 16) calc(100% / 16);
+}

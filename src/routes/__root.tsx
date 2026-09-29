@@ -7,10 +7,11 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+
+const SHOPIFY_API_KEY = import.meta.env.VITE_SHOPIFY_API_KEY;
 
 function NotFoundComponent() {
   return (
@@ -37,10 +38,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
@@ -50,6 +47,12 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+        {import.meta.env.DEV ? (
+          <pre className="mt-4 max-h-60 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-left font-mono text-xs text-foreground">
+            {error.message}
+            {error.stack ? `\n\n${error.stack}` : ""}
+          </pre>
+        ) : null}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -89,7 +92,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap",
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -102,6 +108,13 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        {/* App Bridge must be the first script so the app works embedded in Shopify admin. */}
+        {SHOPIFY_API_KEY ? (
+          <>
+            <meta name="shopify-api-key" content={SHOPIFY_API_KEY} />
+            <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" />
+          </>
+        ) : null}
         <HeadContent />
       </head>
       <body>

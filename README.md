@@ -1,24 +1,20 @@
-# Welcome to your Lovable project
+# CursorForge
 
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+An interactive storefront for browsing and purchasing custom cursor designs through Shopify.
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+You need Node.js 22.12 or newer and npm.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+npm install
 npm run dev
+```
+
+Create a production build with:
+
+```sh
+npm run build
 ```
 
 ## Built with
@@ -27,3 +23,4 @@ npm run dev
 - TypeScript
 - React
 - Tailwind CSS
+- Shopify Storefront API

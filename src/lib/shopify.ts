@@ -1,6 +1,7 @@
 export const SHOPIFY_API_VERSION = "2025-07";
-export const SHOPIFY_STORE_DOMAIN = "vgpcreatives.myshopify.com";
-export const SHOPIFY_STOREFRONT_TOKEN = "3bb13278a3e681670b37ced0d6ac58d9";
+// Public Storefront credentials from .env; fallbacks keep Lovable builds working without env vars.
+export const SHOPIFY_STORE_DOMAIN = import.meta.env.VITE_SHOPIFY_STORE_DOMAIN ?? "vgpcreatives.myshopify.com";
+export const SHOPIFY_STOREFRONT_TOKEN = import.meta.env.VITE_SHOPIFY_STOREFRONT_TOKEN ?? "3bb13278a3e681670b37ced0d6ac58d9";
 const SHOPIFY_STOREFRONT_URL = `https://${SHOPIFY_STORE_DOMAIN}/api/${SHOPIFY_API_VERSION}/graphql.json`;
 
 export interface ShopifyProduct {
