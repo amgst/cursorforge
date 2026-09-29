@@ -30,9 +30,28 @@
       assign trail_size = saved.trail_size
     endif
     assign trail_color = saved.trail_color
-    capture default_cursor
-      render 'cursorforge-cursor', design: saved
-    endcapture
+    assign default_src = saved.image_url
+    if default_src != blank
+      unless default_src contains '.svg'
+        if default_src contains '?'
+          assign default_src = default_src | append: '&width=' | append: size | append: '&height=' | append: size
+        else
+          assign default_src = default_src | append: '?width=' | append: size | append: '&height=' | append: size
+        endif
+      endunless
+    elsif saved.svg != blank
+      assign default_src = saved.svg | base64_encode | prepend: 'data:image/svg+xml;base64,'
+    endif
+    if default_src != blank
+      capture default_cursor
+        echo 'url("'
+        echo default_src
+        echo '") '
+        echo hotspot_x
+        echo ' '
+        echo hotspot_y
+      endcapture
+    endif
   endif
 
   if default_cursor == blank
@@ -71,9 +90,32 @@
     when 'system'
       assign pointer_cursor = 'pointer'
     when 'custom'
-      capture pointer_image
-        render 'cursorforge-cursor', design: saved.states.pointer.design
-      endcapture
+      assign pointer_design = saved.states.pointer.design
+      assign pointer_size = pointer_design.size | default: 32
+      assign pointer_x = pointer_design.hotspot_x | default: 0 | at_most: pointer_size
+      assign pointer_y = pointer_design.hotspot_y | default: 0 | at_most: pointer_size
+      assign pointer_src = pointer_design.image_url
+      if pointer_src != blank
+        unless pointer_src contains '.svg'
+          if pointer_src contains '?'
+            assign pointer_src = pointer_src | append: '&width=' | append: pointer_size | append: '&height=' | append: pointer_size
+          else
+            assign pointer_src = pointer_src | append: '?width=' | append: pointer_size | append: '&height=' | append: pointer_size
+          endif
+        endunless
+      elsif pointer_design.svg != blank
+        assign pointer_src = pointer_design.svg | base64_encode | prepend: 'data:image/svg+xml;base64,'
+      endif
+      if pointer_src != blank
+        capture pointer_image
+          echo 'url("'
+          echo pointer_src
+          echo '") '
+          echo pointer_x
+          echo ' '
+          echo pointer_y
+        endcapture
+      endif
       if pointer_image == blank
         assign pointer_cursor = 'pointer'
       else
@@ -87,9 +129,32 @@
     when 'match'
       assign text_cursor = default_cursor | append: ', text'
     when 'custom'
-      capture text_image
-        render 'cursorforge-cursor', design: saved.states.text.design
-      endcapture
+      assign text_design = saved.states.text.design
+      assign text_size = text_design.size | default: 32
+      assign text_x = text_design.hotspot_x | default: 0 | at_most: text_size
+      assign text_y = text_design.hotspot_y | default: 0 | at_most: text_size
+      assign text_src = text_design.image_url
+      if text_src != blank
+        unless text_src contains '.svg'
+          if text_src contains '?'
+            assign text_src = text_src | append: '&width=' | append: text_size | append: '&height=' | append: text_size
+          else
+            assign text_src = text_src | append: '?width=' | append: text_size | append: '&height=' | append: text_size
+          endif
+        endunless
+      elsif text_design.svg != blank
+        assign text_src = text_design.svg | base64_encode | prepend: 'data:image/svg+xml;base64,'
+      endif
+      if text_src != blank
+        capture text_image
+          echo 'url("'
+          echo text_src
+          echo '") '
+          echo text_x
+          echo ' '
+          echo text_y
+        endcapture
+      endif
       if text_image == blank
         assign text_cursor = 'text'
       else
@@ -103,9 +168,32 @@
     when 'match'
       assign loading_cursor = default_cursor | append: ', progress'
     when 'custom'
-      capture loading_image
-        render 'cursorforge-cursor', design: saved.states.loading.design
-      endcapture
+      assign loading_design = saved.states.loading.design
+      assign loading_size = loading_design.size | default: 32
+      assign loading_x = loading_design.hotspot_x | default: 0 | at_most: loading_size
+      assign loading_y = loading_design.hotspot_y | default: 0 | at_most: loading_size
+      assign loading_src = loading_design.image_url
+      if loading_src != blank
+        unless loading_src contains '.svg'
+          if loading_src contains '?'
+            assign loading_src = loading_src | append: '&width=' | append: loading_size | append: '&height=' | append: loading_size
+          else
+            assign loading_src = loading_src | append: '?width=' | append: loading_size | append: '&height=' | append: loading_size
+          endif
+        endunless
+      elsif loading_design.svg != blank
+        assign loading_src = loading_design.svg | base64_encode | prepend: 'data:image/svg+xml;base64,'
+      endif
+      if loading_src != blank
+        capture loading_image
+          echo 'url("'
+          echo loading_src
+          echo '") '
+          echo loading_x
+          echo ' '
+          echo loading_y
+        endcapture
+      endif
       if loading_image == blank
         assign loading_cursor = 'progress'
       else
