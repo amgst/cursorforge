@@ -3,6 +3,7 @@ declare global {
   interface Window {
     shopify?: {
       idToken: () => Promise<string>;
+      config?: { shop?: string };
       toast: {
         show: (message: string, options?: { isError?: boolean; duration?: number }) => void;
       };
@@ -12,6 +13,11 @@ declare global {
 
 export function isEmbeddedInAdmin() {
   return typeof window !== "undefined" && typeof window.shopify?.idToken === "function";
+}
+
+/** The shop's myshopify.com domain, as reported by App Bridge. */
+export function currentShopDomain() {
+  return typeof window !== "undefined" ? window.shopify?.config?.shop : undefined;
 }
 
 /** Returns a fresh App Bridge session token for authenticating server functions. */

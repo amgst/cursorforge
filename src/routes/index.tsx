@@ -3,6 +3,7 @@ import { CloudUpload, LoaderCircle, Pencil, ShieldCheck, Upload, X } from "lucid
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { DrawPad } from "@/components/draw-pad";
+import { SetupGuide } from "@/components/setup-guide";
 import { getSessionToken, isEmbeddedInAdmin, showToast } from "@/lib/app-bridge";
 import {
   CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_STATE_MODES, TRAIL_STYLES,
@@ -251,6 +252,7 @@ function CursorStudio() {
       <div className="flex shrink-0 items-center gap-2.5"><div className="relative grid size-8 place-items-center rounded-md bg-primary"><span className="cursor-mark" /></div><div className="leading-none"><div className="text-sm font-semibold">CursorForge</div><div className="mt-1 hidden font-mono text-[9px] uppercase text-muted-foreground sm:block">Precision cursor studio</div></div></div>
       <div className="ml-auto flex items-center gap-3"><Link to="/privacy" title="Privacy policy" aria-label="Privacy policy" className="inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-panel-raised hover:text-foreground"><ShieldCheck size={15}/><span className="hidden md:inline">Privacy</span></Link><span className="hidden sm:inline"><PublishStatus status={status}/></span><PublishButton publishing={publishing} onPublish={publishToStore}/></div>
     </header>
+    <SetupGuide apiKey={import.meta.env.VITE_SHOPIFY_API_KEY} embedded={embedded} published={publishedKey !== null}/>
 
     <div className="grid min-h-[calc(100vh-3.5rem)] grid-cols-1 lg:grid-cols-[192px_minmax(0,1fr)_256px]">
       <aside className="order-2 border-t border-border bg-panel p-3 lg:order-none lg:border-r lg:border-t-0">
