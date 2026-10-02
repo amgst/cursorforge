@@ -173,6 +173,10 @@
     background-size: 22px 22px;
   }
   .cursor-preview-shadow { filter: drop-shadow(6px 8px 3px oklch(0.08 0.01 275 / 55%)); }
+  .scroll-slim { scrollbar-width: thin; scrollbar-color: var(--border) transparent; scrollbar-gutter: stable; }
+  .scroll-slim::-webkit-scrollbar { width: 6px; }
+  .scroll-slim::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+  .scroll-slim::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
 }
 
 @keyframes cursor-pulse { 50% { transform: scale(1.08); } }
