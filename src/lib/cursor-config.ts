@@ -42,6 +42,8 @@ const stateSchema = (mode: CursorStateMode) =>
 // the theme app extension (extensions/cursor-embed) as `app.metafields.cursorforge.config`.
 // Keys are snake_case so Liquid can read them directly. The Default cursor's design is at the top level.
 export const cursorConfigSchema = z.object({
+  // false = the store shows the visitor's normal computer cursor (Reset to computer default).
+  enabled: z.boolean().default(true),
   ...designShape,
   trail_enabled: z.boolean(),
   trail_length: z.number().int().min(3).max(20),

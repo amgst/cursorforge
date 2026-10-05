@@ -1,5 +1,7 @@
+{%- assign saved = app.metafields.cursorforge.config.value -%}
+{%- comment -%} enabled: false = reset to the computer's default cursor, so nothing is output. {%- endcomment -%}
+{%- unless saved.enabled == false -%}
 {%- liquid
-  assign saved = app.metafields.cursorforge.config.value
 
   assign size = 32
   assign hotspot_x = 4
@@ -236,6 +238,7 @@
   ></div>
   <script src="{{ 'cursorforge-trail.js' | asset_url }}" defer></script>
 {%- endif -%}
+{%- endunless -%}
 
 {% schema %}
 {
@@ -244,7 +247,7 @@
   "settings": [
     {
       "type": "paragraph",
-      "content": "Design and publish your cursor in the CursorForge app (Apps → CursorForge). Until you publish one, a built-in arrow is shown."
+      "content": "Design and publish your cursor in the CursorForge app (Apps → CursorForge). Until you publish one, a built-in arrow is shown. After Reset to computer default, the normal cursor is shown."
     }
   ]
 }

@@ -43,7 +43,7 @@ const MODE_OPTIONS: Array<{ id: CursorStateMode; label: string }> = [
 interface Design { shapeId: string; color: string; size: number; hotspotX: number; hotspotY: number; outline: number; shadow: boolean; image: string | null; file: File | null }
 type Designs = Record<StateTab, Design>;
 interface Trail { style: TrailStyle | "off"; length: number; size: number; color: string | null }
-type PublishState = "preview" | "never" | "published" | "changed";
+type PublishState = "preview" | "never" | "published" | "standard" | "changed";
 
 function newDesign(): Design {
   const [hotspotX, hotspotY] = shapeHotspot(DEFAULT_SHAPE_ID, 42);
@@ -58,6 +58,13 @@ function designFromSaved(saved: CursorDesign): Design {
 }
 function designSvg(design: Design) {
   return buildCursorSvg(design.shapeId, { color: design.color, outline: design.outline, shadow: design.shadow, size: design.size });
+}
+function savedDesign(design: Design, imageUrl: string | null): CursorDesign {
+  const round = (value: number) => Math.max(0, Math.round(value));
+  return {
+    size: design.size, hotspot_x: round(design.hotspotX), hotspot_y: round(design.hotspotY), color: design.color, outline: design.outline, shadow: design.shadow,
+    image_url: imageUrl, shape: imageUrl ? null : design.shapeId, svg: imageUrl ? null : designSvg(design),
+  };
 }
 
 /** Fingerprint of everything that gets published, for the Published / Unpublished changes badge. */
@@ -86,6 +93,9 @@ function CursorStudio() {
   const [embedded, setEmbedded] = useState(false);
   // Design as last loaded from / published to the store; compared with the current design for the status badge.
   const [publishedKey, setPublishedKey] = useState<string | null>(null);
+  // The store shows the normal computer cursor (published with enabled: false).
+  const [liveStandard, setLiveStandard] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const trailCanvasRef = useRef<HTMLCanvasElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -122,7 +132,7 @@ function CursorStudio() {
         }
         const nextTrail: Trail = { style: config.trail_enabled ? config.trail_style : "off", length: config.trail_length, size: config.trail_size, color: config.trail_color };
         setDesigns(nextDesigns); setModes(nextModes); setTrail(nextTrail); setDrawing(false);
-        setPublishedKey(designKeyOf(nextDesigns, nextModes, nextTrail));
+        setPublishedKey(designKeyOf(nextDesigns, nextModes, nextTrail)); setLiveStandard(!config.enabled);
       })
       .catch((error: unknown) => showToast(`Couldn't load saved cursor: ${error instanceof Error ? error.message : String(error)}`, true));
     getSessionToken()
@@ -133,7 +143,7 @@ function CursorStudio() {
   }, []);
 
   const designKey = designKeyOf(designs, modes, trail);
-  const status: PublishState = !embedded ? "preview" : publishedKey === null ? "never" : publishedKey === designKey ? "published" : "changed";
+  const status: PublishState = !embedded ? "preview" : publishedKey === null ? "never" : publishedKey !== designKey ? "changed" : liveStandard ? "standard" : "published";
   const transform = useMemo(() => ({ left: `${cursorPosition.x}%`, top: `${cursorPosition.y}%` }), [cursorPosition]);
   // Shadow is baked into the SVG so the preview matches the storefront exactly.
   const previewSvg = useMemo(() => previewDesign && !previewDesign.image ? designSvg(previewDesign) : null, [previewDesign]);
@@ -203,11 +213,28 @@ function CursorStudio() {
     }
   };
 
-  /** Puts every state and the trail back to the starting design. Publishing applies it to the store. */
-  const resetToDefaults = () => {
-    if (!window.confirm("Reset all cursor states and the trail to the default design? Your uploads stay in My uploads.")) return;
-    setDesigns(newDesigns()); setModes(DEFAULT_STATE_MODES); setTrail(DEFAULT_TRAIL); setDrawing(false); setActiveState("default");
-    showToast(embedded ? "Reset to defaults. Publish to apply it to your store." : "Reset to defaults");
+  /** Removes all customization: the store goes back to the visitor's normal computer cursor and the editor starts over. */
+  const resetToComputerDefault = async () => {
+    if (!window.confirm("Remove your custom cursor and trail from the store and go back to the normal computer cursor? Your uploads stay in My uploads.")) return;
+    const nextDesigns = newDesigns();
+    const applyReset = () => { setDesigns(nextDesigns); setModes(DEFAULT_STATE_MODES); setTrail(DEFAULT_TRAIL); setDrawing(false); setActiveState("default"); };
+    if (!embedded) { applyReset(); return; }
+    setResetting(true);
+    try {
+      const config: CursorConfig = {
+        enabled: false, ...savedDesign(nextDesigns.default, null),
+        trail_enabled: false, trail_style: DEFAULT_TRAIL.style === "off" ? "dots" : DEFAULT_TRAIL.style, trail_length: DEFAULT_TRAIL.length, trail_size: DEFAULT_TRAIL.size, trail_color: null,
+        states: Object.fromEntries(CURSOR_STATES.map((id) => [id, { mode: DEFAULT_STATE_MODES[id], design: null }])) as CursorConfig["states"],
+      };
+      await saveCursorConfig({ data: { idToken: await getSessionToken(), config } });
+      applyReset();
+      setPublishedKey(designKeyOf(nextDesigns, DEFAULT_STATE_MODES, DEFAULT_TRAIL)); setLiveStandard(true);
+      showToast("Your store now uses the normal computer cursor");
+    } catch (error) {
+      showToast(`Reset failed: ${error instanceof Error ? error.message : String(error)}`, true);
+    } finally {
+      setResetting(false);
+    }
   };
 
   const publishToStore = async () => {
@@ -220,17 +247,10 @@ function CursorStudio() {
         if (!design.file) return null;
         return (await saveImage(design.image, design.file)).url;
       };
-      const toSaved = async (design: Design): Promise<CursorDesign> => {
-        const imageUrl = await upload(design);
-        const round = (value: number) => Math.max(0, Math.round(value));
-        return {
-          size: design.size, hotspot_x: round(design.hotspotX), hotspot_y: round(design.hotspotY), color: design.color, outline: design.outline, shadow: design.shadow,
-          image_url: imageUrl ?? null, shape: imageUrl ? null : design.shapeId, svg: imageUrl ? null : designSvg(design),
-        };
-      };
+      const toSaved = async (design: Design) => savedDesign(design, (await upload(design)) ?? null);
       const stateEntries = await Promise.all(CURSOR_STATES.map(async (id) => [id, { mode: modes[id], design: modes[id] === "custom" ? await toSaved(designs[id]) : null }] as const));
       const config: CursorConfig = {
-        ...(await toSaved(designs.default)),
+        enabled: true, ...(await toSaved(designs.default)),
         trail_enabled: trail.style !== "off", trail_style: trail.style === "off" ? "dots" : trail.style,
         trail_length: trail.length, trail_size: trail.size, trail_color: trail.color,
         states: Object.fromEntries(stateEntries) as CursorConfig["states"],
@@ -248,7 +268,7 @@ function CursorStudio() {
         return [id, url ? { ...design, image: url, file: null } : design];
       })) as Designs;
       setDesigns(published);
-      setPublishedKey(designKeyOf(published, modes, trail));
+      setPublishedKey(designKeyOf(published, modes, trail)); setLiveStandard(false);
       showToast("Cursor published to your store");
     } catch (error) {
       showToast(`Publish failed: ${error instanceof Error ? error.message : String(error)}`, true);
@@ -309,7 +329,7 @@ function CursorStudio() {
         <div className="mb-4 mt-6 border-t border-border pt-4 font-mono text-[10px] uppercase text-muted-foreground">Trail · all states</div>
         <Control label="Trail" value={trail.style} accent="text-primary"><div className="grid grid-cols-3 gap-1 rounded-md bg-panel-raised p-1">{(["off", ...TRAIL_STYLES] as const).map((style) => <button key={style} type="button" aria-pressed={trail.style === style} onClick={() => setTrail((prev) => ({ ...prev, style }))} className={`h-7 rounded-md px-2 font-mono text-[10px] capitalize ${trail.style === style ? "bg-primary font-bold text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{style}</button>)}</div></Control>
         {trail.style !== "off" ? <><Control label="Trail length" value={`${trail.length}`}><input aria-label="Trail length" type="range" min="3" max="20" value={trail.length} onChange={(event) => setTrail((prev) => ({ ...prev, length: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control><Control label="Trail size" value={`${trail.size} px`}><input aria-label="Trail size" type="range" min="2" max="16" value={trail.size} onChange={(event) => setTrail((prev) => ({ ...prev, size: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control><Control label="Trail color" value={trail.color ?? "cursor"}><div className="flex items-center gap-2"><Segmented values={["Cursor", "Custom"]} active={trail.color ? "Custom" : "Cursor"} setActive={(value) => setTrail((prev) => ({ ...prev, color: value === "Custom" ? (prev.color ?? designs.default.color) : null }))}/>{trail.color ? <input aria-label="Trail color" type="color" value={trail.color} onChange={(event) => setTrail((prev) => ({ ...prev, color: event.target.value }))} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent p-0"/> : null}</div></Control></> : null}
-        <div className="mt-6 border-t border-border pt-4"><Button variant="panel" className="mb-2 w-full" disabled={publishing || designKey === designKeyOf(newDesigns(), DEFAULT_STATE_MODES, DEFAULT_TRAIL)} onClick={resetToDefaults}><RotateCcw size={15}/>Reset to defaults</Button><PublishButton publishing={publishing} onPublish={publishToStore} className="w-full"/><div className="mt-3 flex justify-center"><PublishStatus status={status}/></div></div>
+        <div className="mt-6 border-t border-border pt-4"><Button variant="panel" className="mb-2 w-full" disabled={publishing || resetting || status === "standard"} onClick={() => void resetToComputerDefault()}>{resetting ? <LoaderCircle size={15} className="animate-spin"/> : <RotateCcw size={15}/>}Reset to computer default</Button><PublishButton publishing={publishing} onPublish={publishToStore} className="w-full"/><div className="mt-3 flex justify-center"><PublishStatus status={status}/></div></div>
       </aside>
     </div>
   </div>;
@@ -329,6 +349,7 @@ function PublishStatus({ status }: { status: PublishState }) {
     preview: ["Open in Shopify admin to publish", "text-muted-foreground"],
     never: ["Not published yet", "text-muted-foreground"],
     published: ["● Published", "text-mint"],
+    standard: ["● Computer default cursor", "text-mint"],
     changed: ["● Unpublished changes", "text-sun"],
   }[status];
   return <span role="status" className={`font-mono text-[10px] uppercase ${tone}`}>{label}</span>;
