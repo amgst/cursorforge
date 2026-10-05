@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CloudUpload, LoaderCircle, Pencil, ShieldCheck, Upload, X } from "lucide-react";
+import { CloudUpload, LoaderCircle, Pencil, RotateCcw, ShieldCheck, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { DrawPad } from "@/components/draw-pad";
@@ -49,6 +49,10 @@ function newDesign(): Design {
   const [hotspotX, hotspotY] = shapeHotspot(DEFAULT_SHAPE_ID, 42);
   return { shapeId: DEFAULT_SHAPE_ID, color: CURSOR_COLORS[0].hex, size: 42, hotspotX, hotspotY, outline: 2, shadow: true, image: null, file: null };
 }
+function newDesigns(): Designs {
+  return { default: newDesign(), pointer: newDesign(), text: newDesign(), loading: newDesign() };
+}
+const DEFAULT_TRAIL: Trail = { style: "dots", length: 8, size: 6, color: null };
 function designFromSaved(saved: CursorDesign): Design {
   return { shapeId: getCursorShape(saved.shape).id, color: saved.color, size: saved.size, hotspotX: saved.hotspot_x, hotspotY: saved.hotspot_y, outline: saved.outline, shadow: saved.shadow, image: saved.image_url, file: null };
 }
@@ -73,9 +77,9 @@ function readFileAsBase64(file: File) {
 
 function CursorStudio() {
   const [activeState, setActiveState] = useState<StateTab>("default");
-  const [designs, setDesigns] = useState<Designs>(() => ({ default: newDesign(), pointer: newDesign(), text: newDesign(), loading: newDesign() }));
+  const [designs, setDesigns] = useState<Designs>(newDesigns);
   const [modes, setModes] = useState<Modes>(DEFAULT_STATE_MODES);
-  const [trail, setTrail] = useState<Trail>({ style: "dots", length: 8, size: 6, color: null });
+  const [trail, setTrail] = useState<Trail>(DEFAULT_TRAIL);
   const [drawing, setDrawing] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 50, y: 48 });
   const [publishing, setPublishing] = useState(false);
@@ -199,6 +203,13 @@ function CursorStudio() {
     }
   };
 
+  /** Puts every state and the trail back to the starting design. Publishing applies it to the store. */
+  const resetToDefaults = () => {
+    if (!window.confirm("Reset all cursor states and the trail to the default design? Your uploads stay in My uploads.")) return;
+    setDesigns(newDesigns()); setModes(DEFAULT_STATE_MODES); setTrail(DEFAULT_TRAIL); setDrawing(false); setActiveState("default");
+    showToast(embedded ? "Reset to defaults. Publish to apply it to your store." : "Reset to defaults");
+  };
+
   const publishToStore = async () => {
     if (!isEmbeddedInAdmin()) { window.alert("Open CursorForge from your Shopify admin to publish the cursor to your store."); return; }
     setPublishing(true);
@@ -298,7 +309,7 @@ function CursorStudio() {
         <div className="mb-4 mt-6 border-t border-border pt-4 font-mono text-[10px] uppercase text-muted-foreground">Trail · all states</div>
         <Control label="Trail" value={trail.style} accent="text-primary"><div className="grid grid-cols-3 gap-1 rounded-md bg-panel-raised p-1">{(["off", ...TRAIL_STYLES] as const).map((style) => <button key={style} type="button" aria-pressed={trail.style === style} onClick={() => setTrail((prev) => ({ ...prev, style }))} className={`h-7 rounded-md px-2 font-mono text-[10px] capitalize ${trail.style === style ? "bg-primary font-bold text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{style}</button>)}</div></Control>
         {trail.style !== "off" ? <><Control label="Trail length" value={`${trail.length}`}><input aria-label="Trail length" type="range" min="3" max="20" value={trail.length} onChange={(event) => setTrail((prev) => ({ ...prev, length: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control><Control label="Trail size" value={`${trail.size} px`}><input aria-label="Trail size" type="range" min="2" max="16" value={trail.size} onChange={(event) => setTrail((prev) => ({ ...prev, size: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control><Control label="Trail color" value={trail.color ?? "cursor"}><div className="flex items-center gap-2"><Segmented values={["Cursor", "Custom"]} active={trail.color ? "Custom" : "Cursor"} setActive={(value) => setTrail((prev) => ({ ...prev, color: value === "Custom" ? (prev.color ?? designs.default.color) : null }))}/>{trail.color ? <input aria-label="Trail color" type="color" value={trail.color} onChange={(event) => setTrail((prev) => ({ ...prev, color: event.target.value }))} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent p-0"/> : null}</div></Control></> : null}
-        <div className="mt-6 border-t border-border pt-4"><PublishButton publishing={publishing} onPublish={publishToStore} className="w-full"/><div className="mt-3 flex justify-center"><PublishStatus status={status}/></div></div>
+        <div className="mt-6 border-t border-border pt-4"><Button variant="panel" className="mb-2 w-full" disabled={publishing || designKey === designKeyOf(newDesigns(), DEFAULT_STATE_MODES, DEFAULT_TRAIL)} onClick={resetToDefaults}><RotateCcw size={15}/>Reset to defaults</Button><PublishButton publishing={publishing} onPublish={publishToStore} className="w-full"/><div className="mt-3 flex justify-center"><PublishStatus status={status}/></div></div>
       </aside>
     </div>
   </div>;
