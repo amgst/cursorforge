@@ -15,6 +15,10 @@
   assign trail_size = 6
   assign trail_color = ''
   assign default_cursor = ''
+  assign default_system = false
+  if saved.default_mode == 'system'
+    assign default_system = true
+  endif
 
   if saved.size > 0
     assign size = saved.size
@@ -84,6 +88,11 @@
     endcapture
   endif
 
+  # Default set to Standard cursor: no html/body rule, and states set to match use the system cursor.
+  if default_system
+    assign default_cursor = ''
+  endif
+
   assign pointer_mode = saved.states.pointer.mode | default: 'match'
   assign text_mode = saved.states.text.mode | default: 'system'
   assign loading_mode = saved.states.loading.mode | default: 'system'
@@ -124,12 +133,20 @@
         assign pointer_cursor = pointer_image | append: ', pointer'
       endif
     else
-      assign pointer_cursor = default_cursor | append: ', pointer'
+      if default_cursor == blank
+        assign pointer_cursor = 'pointer'
+      else
+        assign pointer_cursor = default_cursor | append: ', pointer'
+      endif
   endcase
 
   case text_mode
     when 'match'
-      assign text_cursor = default_cursor | append: ', text'
+      if default_cursor == blank
+        assign text_cursor = 'text'
+      else
+        assign text_cursor = default_cursor | append: ', text'
+      endif
     when 'custom'
       assign text_design = saved.states.text.design
       assign text_size = text_design.size | default: 32
@@ -168,7 +185,11 @@
 
   case loading_mode
     when 'match'
-      assign loading_cursor = default_cursor | append: ', progress'
+      if default_cursor == blank
+        assign loading_cursor = 'progress'
+      else
+        assign loading_cursor = default_cursor | append: ', progress'
+      endif
     when 'custom'
       assign loading_design = saved.states.loading.design
       assign loading_size = loading_design.size | default: 32
@@ -208,9 +229,11 @@
 
 <style>
   @media (pointer: fine) {
+    {%- if default_cursor != blank %}
     html, body, body * {
       cursor: {{ default_cursor }}, auto !important;
     }
+    {%- endif %}
     input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="image"]), textarea, [contenteditable="true"] {
       cursor: {{ text_cursor }} !important;
     }

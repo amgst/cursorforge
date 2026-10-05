@@ -8,6 +8,9 @@ export const CURSOR_STATES = ["pointer", "text", "loading"] as const;
 export type CursorStateId = (typeof CURSOR_STATES)[number];
 export const CURSOR_STATE_MODES = ["match", "system", "custom"] as const;
 export type CursorStateMode = (typeof CURSOR_STATE_MODES)[number];
+/** The Default cursor is either custom or the visitor's normal computer cursor. */
+export const DEFAULT_CURSOR_MODES = ["custom", "system"] as const;
+export type DefaultCursorMode = (typeof DEFAULT_CURSOR_MODES)[number];
 export const DEFAULT_STATE_MODES: Record<CursorStateId, CursorStateMode> = {
   pointer: "match",
   text: "system",
@@ -44,6 +47,8 @@ const stateSchema = (mode: CursorStateMode) =>
 export const cursorConfigSchema = z.object({
   // false = the store shows the visitor's normal computer cursor (Reset to computer default).
   enabled: z.boolean().default(true),
+  // system = the Default cursor is the normal computer cursor; states set to match follow it.
+  default_mode: z.enum(DEFAULT_CURSOR_MODES).default("custom"),
   ...designShape,
   trail_enabled: z.boolean(),
   trail_length: z.number().int().min(3).max(20),

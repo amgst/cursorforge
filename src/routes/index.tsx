@@ -7,7 +7,7 @@ import { SetupGuide } from "@/components/setup-guide";
 import { getSessionToken, isEmbeddedInAdmin, showToast } from "@/lib/app-bridge";
 import {
   CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_STATE_MODES, TRAIL_STYLES,
-  type CursorConfig, type CursorDesign, type CursorImage, type CursorStateId, type CursorStateMode, type TrailStyle,
+  type CursorConfig, type CursorDesign, type CursorImage, type CursorStateId, type CursorStateMode, type DefaultCursorMode, type TrailStyle,
 } from "@/lib/cursor-config";
 import { deleteCursorImage, listCursorImages, loadCursorConfig, saveCursorConfig, uploadCursorImage } from "@/lib/cursor-config.functions";
 import { buildCursorSvg, CURSOR_COLORS, CURSOR_SHAPES, DEFAULT_SHAPE_ID, getCursorShape, SHAPE_CATEGORIES, shapeHotspot, svgDataUri } from "@/lib/cursor-presets";
@@ -38,6 +38,7 @@ const STATE_TABS: Array<{ id: StateTab; label: string; target: string; systemCur
 const MODE_OPTIONS: Array<{ id: CursorStateMode; label: string }> = [
   { id: "match", label: "Same as Default" }, { id: "system", label: "Standard cursor" }, { id: "custom", label: "Custom" },
 ];
+const DEFAULT_MODE_OPTIONS = MODE_OPTIONS.filter((option): option is { id: DefaultCursorMode; label: string } => option.id !== "match");
 
 /** A cursor design being edited. `image` is a blob: URL until published, then a Shopify CDN URL. */
 interface Design { shapeId: string; color: string; size: number; hotspotX: number; hotspotY: number; outline: number; shadow: boolean; image: string | null; file: File | null }
@@ -68,9 +69,9 @@ function savedDesign(design: Design, imageUrl: string | null): CursorDesign {
 }
 
 /** Fingerprint of everything that gets published, for the Published / Unpublished changes badge. */
-function designKeyOf(designs: Designs, modes: Modes, trail: Trail) {
+function designKeyOf(designs: Designs, defaultMode: DefaultCursorMode, modes: Modes, trail: Trail) {
   const strip = (design: Design) => ({ ...design, file: undefined, hotspotX: Math.round(design.hotspotX), hotspotY: Math.round(design.hotspotY), color: design.color.toLowerCase() });
-  return JSON.stringify({ default: strip(designs.default), states: CURSOR_STATES.map((id) => [id, modes[id], modes[id] === "custom" ? strip(designs[id]) : null]), trail });
+  return JSON.stringify({ default: strip(designs.default), defaultMode, states: CURSOR_STATES.map((id) => [id, modes[id], modes[id] === "custom" ? strip(designs[id]) : null]), trail });
 }
 
 function readFileAsBase64(file: File) {
@@ -85,6 +86,7 @@ function readFileAsBase64(file: File) {
 function CursorStudio() {
   const [activeState, setActiveState] = useState<StateTab>("default");
   const [designs, setDesigns] = useState<Designs>(newDesigns);
+  const [defaultMode, setDefaultMode] = useState<DefaultCursorMode>("custom");
   const [modes, setModes] = useState<Modes>(DEFAULT_STATE_MODES);
   const [trail, setTrail] = useState<Trail>(DEFAULT_TRAIL);
   const [drawing, setDrawing] = useState(false);
@@ -106,12 +108,12 @@ function CursorStudio() {
   const uploadsRef = useRef(new Map<string, Promise<CursorImage>>());
 
   const tab = STATE_TABS.find((item) => item.id === activeState) ?? STATE_TABS[0]!;
-  const mode = activeState === "default" ? null : modes[activeState];
+  const mode = activeState === "default" ? (defaultMode === "system" ? "system" : null) : modes[activeState];
   // States set to Match or Browser show (and start editing from) the Default design.
   const editingOwnDesign = mode === null || mode === "custom";
   const current = editingOwnDesign ? designs[activeState] : designs.default;
-  // null = the browser's own cursor for this state.
-  const previewDesign = mode === "system" ? null : current;
+  // null = the browser's own cursor for this state. Match follows Default, including its Standard cursor.
+  const previewDesign = mode === "system" || (mode === "match" && defaultMode === "system") ? null : current;
 
   // Inside Shopify admin, start from the cursor that's currently published to the store.
   useEffect(() => {
@@ -131,8 +133,8 @@ function CursorStudio() {
           nextDesigns[id] = saved.design ? designFromSaved(saved.design) : { ...defaultDesign };
         }
         const nextTrail: Trail = { style: config.trail_enabled ? config.trail_style : "off", length: config.trail_length, size: config.trail_size, color: config.trail_color };
-        setDesigns(nextDesigns); setModes(nextModes); setTrail(nextTrail); setDrawing(false);
-        setPublishedKey(designKeyOf(nextDesigns, nextModes, nextTrail)); setLiveStandard(!config.enabled);
+        setDesigns(nextDesigns); setDefaultMode(config.default_mode); setModes(nextModes); setTrail(nextTrail); setDrawing(false);
+        setPublishedKey(designKeyOf(nextDesigns, config.default_mode, nextModes, nextTrail)); setLiveStandard(!config.enabled);
       })
       .catch((error: unknown) => showToast(`Couldn't load saved cursor: ${error instanceof Error ? error.message : String(error)}`, true));
     getSessionToken()
@@ -142,7 +144,7 @@ function CursorStudio() {
     return () => { cancelled = true; };
   }, []);
 
-  const designKey = designKeyOf(designs, modes, trail);
+  const designKey = designKeyOf(designs, defaultMode, modes, trail);
   const status: PublishState = !embedded ? "preview" : publishedKey === null ? "never" : publishedKey !== designKey ? "changed" : liveStandard ? "standard" : "published";
   const transform = useMemo(() => ({ left: `${cursorPosition.x}%`, top: `${cursorPosition.y}%` }), [cursorPosition]);
   // Shadow is baked into the SVG so the preview matches the storefront exactly.
@@ -159,6 +161,7 @@ function CursorStudio() {
   /** Edits the active state's design. Editing a Match/Browser state turns it into a Custom copy of Default. */
   const updateDesign = (patch: Partial<Design>) => {
     const id = activeState;
+    if (id === "default") setDefaultMode("custom");
     const ownDesign = id === "default" || modes[id] === "custom";
     setDesigns((prev) => ({ ...prev, [id]: { ...(ownDesign ? prev[id] : prev.default), ...patch } }));
     if (id !== "default" && !ownDesign) setModes((prev) => ({ ...prev, [id]: "custom" }));
@@ -217,18 +220,18 @@ function CursorStudio() {
   const resetToComputerDefault = async () => {
     if (!window.confirm("Remove your custom cursor and trail from the store and go back to the normal computer cursor? Your uploads stay in My uploads.")) return;
     const nextDesigns = newDesigns();
-    const applyReset = () => { setDesigns(nextDesigns); setModes(DEFAULT_STATE_MODES); setTrail(DEFAULT_TRAIL); setDrawing(false); setActiveState("default"); };
+    const applyReset = () => { setDesigns(nextDesigns); setDefaultMode("custom"); setModes(DEFAULT_STATE_MODES); setTrail(DEFAULT_TRAIL); setDrawing(false); setActiveState("default"); };
     if (!embedded) { applyReset(); return; }
     setResetting(true);
     try {
       const config: CursorConfig = {
-        enabled: false, ...savedDesign(nextDesigns.default, null),
+        enabled: false, default_mode: "custom", ...savedDesign(nextDesigns.default, null),
         trail_enabled: false, trail_style: DEFAULT_TRAIL.style === "off" ? "dots" : DEFAULT_TRAIL.style, trail_length: DEFAULT_TRAIL.length, trail_size: DEFAULT_TRAIL.size, trail_color: null,
         states: Object.fromEntries(CURSOR_STATES.map((id) => [id, { mode: DEFAULT_STATE_MODES[id], design: null }])) as CursorConfig["states"],
       };
       await saveCursorConfig({ data: { idToken: await getSessionToken(), config } });
       applyReset();
-      setPublishedKey(designKeyOf(nextDesigns, DEFAULT_STATE_MODES, DEFAULT_TRAIL)); setLiveStandard(true);
+      setPublishedKey(designKeyOf(nextDesigns, "custom", DEFAULT_STATE_MODES, DEFAULT_TRAIL)); setLiveStandard(true);
       showToast("Your store now uses the normal computer cursor");
     } catch (error) {
       showToast(`Reset failed: ${error instanceof Error ? error.message : String(error)}`, true);
@@ -250,7 +253,7 @@ function CursorStudio() {
       const toSaved = async (design: Design) => savedDesign(design, (await upload(design)) ?? null);
       const stateEntries = await Promise.all(CURSOR_STATES.map(async (id) => [id, { mode: modes[id], design: modes[id] === "custom" ? await toSaved(designs[id]) : null }] as const));
       const config: CursorConfig = {
-        enabled: true, ...(await toSaved(designs.default)),
+        enabled: true, default_mode: defaultMode, ...(await toSaved(designs.default)),
         trail_enabled: trail.style !== "off", trail_style: trail.style === "off" ? "dots" : trail.style,
         trail_length: trail.length, trail_size: trail.size, trail_color: trail.color,
         states: Object.fromEntries(stateEntries) as CursorConfig["states"],
@@ -268,7 +271,7 @@ function CursorStudio() {
         return [id, url ? { ...design, image: url, file: null } : design];
       })) as Designs;
       setDesigns(published);
-      setPublishedKey(designKeyOf(published, modes, trail)); setLiveStandard(false);
+      setPublishedKey(designKeyOf(published, defaultMode, modes, trail)); setLiveStandard(false);
       showToast("Cursor published to your store");
     } catch (error) {
       showToast(`Publish failed: ${error instanceof Error ? error.message : String(error)}`, true);
@@ -304,8 +307,8 @@ function CursorStudio() {
 
       <main className="order-1 flex min-h-[520px] min-w-0 flex-col lg:order-none">
         <div className="flex min-h-11 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
-          <div className="flex rounded-md bg-panel-raised p-1" role="tablist" aria-label="Cursor state">{STATE_TABS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={activeState === item.id} title={item.target} onClick={() => { setActiveState(item.id); setDrawing(false); }} className={`h-7 rounded-md px-2.5 font-mono text-[10px] transition sm:px-3 ${activeState === item.id ? "bg-primary font-bold text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{item.label}{item.id !== "default" && modes[item.id] === "custom" ? " •" : ""}</button>)}</div>
-          {activeState !== "default" ? <ModePicker mode={modes[activeState]} onChange={(next) => setMode(activeState, next)}/> : null}
+          <div className="flex rounded-md bg-panel-raised p-1" role="tablist" aria-label="Cursor state">{STATE_TABS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={activeState === item.id} title={item.target} onClick={() => { setActiveState(item.id); setDrawing(false); }} className={`h-7 rounded-md px-2.5 font-mono text-[10px] transition sm:px-3 ${activeState === item.id ? "bg-primary font-bold text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{item.label}{item.id === "default" ? (defaultMode === "custom" ? " •" : "") : modes[item.id] === "custom" ? " •" : ""}</button>)}</div>
+          {activeState === "default" ? <ModePicker options={DEFAULT_MODE_OPTIONS} mode={defaultMode} onChange={setDefaultMode}/> : <ModePicker options={MODE_OPTIONS} mode={modes[activeState]} onChange={(next) => setMode(activeState, next)}/>}
           <div className="ml-auto flex gap-2 font-mono text-[9px] text-muted-foreground"><span>HOTSPOT {Math.round(current.hotspotX)},{Math.round(current.hotspotY)}</span><span>/</span><span>{current.size}px</span></div>
         </div>
         {drawing ? <div className="cursor-grid flex flex-1 bg-workshop"><DrawPad color={current.color} onColorChange={(color) => updateDesign({ color })} onCancel={() => setDrawing(false)} onDone={(file) => handleUpload(file, { hotspotX: 0, hotspotY: 0 })}/></div> : <div ref={previewRef} className="cursor-grid relative flex-1 overflow-hidden bg-workshop" style={previewDesign ? undefined : { cursor: tab.systemCursor }} onPointerMove={(event) => { const box = event.currentTarget.getBoundingClientRect(); setCursorPosition({ x: ((event.clientX - box.left) / box.width) * 100, y: ((event.clientY - box.top) / box.height) * 100 }); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); handleUpload(event.dataTransfer.files[0]); }}>
@@ -314,14 +317,14 @@ function CursorStudio() {
             <img src={previewDesign.image ?? svgDataUri(previewSvg ?? "")} alt={`${tab.label} cursor preview`} className="object-contain" style={{ width: previewDesign.size, height: previewDesign.size }} />
             <span className="absolute left-0 top-0 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sun ring-2 ring-workshop" />
           </div> : <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center font-mono text-[10px] uppercase text-muted-foreground">Standard {tab.label.toLowerCase()} cursor<br/>Pick a shape, color, upload or drawing to customize it</div>}
-          <div className="absolute left-4 top-3 font-mono text-[9px] uppercase text-muted-foreground">Live preview · {tab.label} · {tab.target}{mode === "match" ? " · same as Default" : ""}</div><div className="absolute right-4 top-3 font-mono text-[9px] text-mint">● TRACKING</div><div className="absolute bottom-3 left-4 font-mono text-[9px] text-muted-foreground">DROP PNG / GIF / SVG · GRID 22</div>
+          <div className="absolute left-4 top-3 font-mono text-[9px] uppercase text-muted-foreground">Live preview · {tab.label} · {tab.target}{mode === "match" ? ` · same as Default${defaultMode === "system" ? " (standard)" : ""}` : ""}</div><div className="absolute right-4 top-3 font-mono text-[9px] text-mint">● TRACKING</div><div className="absolute bottom-3 left-4 font-mono text-[9px] text-muted-foreground">DROP PNG / GIF / SVG · GRID 22</div>
         </div>}
         <div className="border-t border-border bg-panel px-4 py-3"><div className="flex items-center gap-2 overflow-x-auto"><span className="shrink-0 font-mono text-[9px] uppercase text-muted-foreground">Colors</span>{CURSOR_COLORS.map((swatch) => { const active = mode !== "system" && current.color.toLowerCase() === swatch.hex; return <Button key={swatch.hex} variant="panel" aria-pressed={active} onClick={() => selectColor(swatch.hex)} className={`shrink-0 ${active ? "ring-1 ring-sun" : ""}`}><span className="size-4 rounded-sm ring-1 ring-border" style={{ background: swatch.hex }}/>{swatch.name}</Button>; })}<label className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md bg-panel-raised px-3 text-sm font-semibold text-muted-foreground hover:text-foreground"><input aria-label="Custom cursor color" type="color" value={current.color} onChange={(event) => selectColor(event.target.value)} className="size-4 cursor-pointer border-0 bg-transparent p-0"/>Custom</label></div></div>
       </main>
 
       <aside className="order-3 border-t border-border bg-panel p-3.5 lg:border-l lg:border-t-0">
         <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">Inspector · {tab.label}</p>
-        <p className="mb-5 text-xs text-muted-foreground">{mode === "match" ? `${tab.target} use the Default cursor. Change anything below to customize it.` : mode === "system" ? `${tab.target} use the standard cursor. Change anything below to customize it.` : tab.target}</p>
+        <p className="mb-5 text-xs text-muted-foreground">{mode === "match" ? `${tab.target} use the Default cursor${defaultMode === "system" ? " (the standard computer cursor)" : ""}. Change anything below to customize it.` : mode === "system" ? `${tab.target} use the standard computer cursor. Change anything below to customize it.` : tab.target}</p>
         <Control label="Size" value={`${current.size} px`} accent="text-sun"><input aria-label="Cursor size" type="range" min="16" max="96" value={current.size} onChange={(event) => updateDesign({ size: Number(event.target.value) })} className="w-full accent-[var(--sun)]"/></Control>
         <Control label="Hotspot" value={`X ${Math.round(current.hotspotX)} · Y ${Math.round(current.hotspotY)}`} accent="text-primary"><div className="grid grid-cols-2 gap-2"><NumberInput label="Hotspot X" value={current.hotspotX} setValue={(hotspotX) => updateDesign({ hotspotX })}/><NumberInput label="Hotspot Y" value={current.hotspotY} setValue={(hotspotY) => updateDesign({ hotspotY })}/></div></Control>
         <Control label="Outline" value={`${current.outline} px`} accent="text-sky"><Segmented values={[0, 2, 4]} active={current.outline} setActive={(outline) => updateDesign({ outline })}/></Control>
@@ -338,8 +341,8 @@ function CursorStudio() {
 function Control({ label, value, accent = "text-muted-foreground", children }: { label: string; value: string; accent?: string; children: React.ReactNode }) { return <div className="mb-5"><div className="mb-2 flex justify-between"><label className="text-sm font-medium">{label}</label><span className={`font-mono text-[10px] ${accent}`}>{value}</span></div>{children}</div>; }
 function NumberInput({ label, value, setValue }: { label: string; value: number; setValue: (value: number) => void }) { return <input aria-label={label} type="number" min="0" max="96" value={value} onChange={(event) => setValue(Number(event.target.value))} className="h-9 min-w-0 rounded-md border border-border bg-panel-raised px-2.5 font-mono text-sm text-foreground outline-none focus:border-sun"/>; }
 function Segmented<T extends string | number>({ values, active, setActive }: { values: T[]; active: T; setActive: (value: T) => void }) { return <div className="inline-flex rounded-md bg-panel-raised p-1">{values.map((value) => <button key={value} onClick={() => setActive(value)} className={`h-7 min-w-12 rounded-md px-3 font-mono text-[10px] ${active === value ? "bg-sky font-bold text-ink" : "text-muted-foreground"}`}>{value}</button>)}</div>; }
-function ModePicker({ mode, onChange }: { mode: CursorStateMode; onChange: (mode: CursorStateMode) => void }) {
-  return <div className="inline-flex rounded-md bg-panel-raised p-1" role="radiogroup" aria-label="Cursor for this state">{MODE_OPTIONS.map((option) => <button key={option.id} type="button" role="radio" aria-checked={mode === option.id} title={option.id === "match" ? "Use the Default cursor" : option.id === "system" ? "Use the normal system cursor" : "Design a separate cursor"} onClick={() => onChange(option.id)} className={`h-7 rounded-md px-2.5 font-mono text-[10px] ${mode === option.id ? "bg-sky font-bold text-ink" : "text-muted-foreground hover:text-foreground"}`}>{option.label}</button>)}</div>;
+function ModePicker<T extends CursorStateMode>({ options, mode, onChange }: { options: Array<{ id: T; label: string }>; mode: T; onChange: (mode: T) => void }) {
+  return <div className="inline-flex rounded-md bg-panel-raised p-1" role="radiogroup" aria-label="Cursor for this state">{options.map((option) => <button key={option.id} type="button" role="radio" aria-checked={mode === option.id} title={option.id === "match" ? "Use the Default cursor" : option.id === "system" ? "Use the normal system cursor" : "Design a separate cursor"} onClick={() => onChange(option.id)} className={`h-7 rounded-md px-2.5 font-mono text-[10px] ${mode === option.id ? "bg-sky font-bold text-ink" : "text-muted-foreground hover:text-foreground"}`}>{option.label}</button>)}</div>;
 }
 function PublishButton({ publishing, onPublish, className = "" }: { publishing: boolean; onPublish: () => void; className?: string }) {
   return <Button variant="sun" className={className} disabled={publishing} onClick={onPublish}>{publishing ? <LoaderCircle size={15} className="animate-spin"/> : <CloudUpload size={15}/>}{publishing ? "Publishing…" : "Publish to store"}</Button>;
