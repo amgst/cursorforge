@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { DrawPad } from "@/components/draw-pad";
 import { SetupGuide } from "@/components/setup-guide";
-import { getSessionToken, isEmbeddedInAdmin, showToast } from "@/lib/app-bridge";
+import { getSessionToken, isEmbeddedInAdmin, requestReview, showToast } from "@/lib/app-bridge";
 import {
   CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_STATE_MODES, TRAIL_STYLES,
   type CursorConfig, type CursorDesign, type CursorImage, type CursorStateId, type CursorStateMode, type DefaultCursorMode, type TrailStyle,
@@ -112,8 +112,19 @@ function CursorStudio() {
   // States set to Match or Browser show (and start editing from) the Default design.
   const editingOwnDesign = mode === null || mode === "custom";
   const current = editingOwnDesign ? designs[activeState] : designs.default;
-  // null = the browser's own cursor for this state. Match follows Default, including its Standard cursor.
-  const previewDesign = mode === "system" || (mode === "match" && defaultMode === "system") ? null : current;
+  /** The cursor a state shows on the store; null = the browser's own cursor. Match follows Default, including its Standard cursor. */
+  const designFor = (id: StateTab): Design | null => {
+    if (id === "default") return defaultMode === "system" ? null : designs.default;
+    if (modes[id] === "system") return null;
+    if (modes[id] === "custom") return designs[id];
+    return defaultMode === "system" ? null : designs.default;
+  };
+  // The preview area under the pointer (null when the pointer is outside the preview).
+  const [hoveredZone, setHoveredZone] = useState<StateTab | null>(null);
+  const shownState = hoveredZone ?? activeState;
+  const shownTab = STATE_TABS.find((item) => item.id === shownState) ?? STATE_TABS[0]!;
+  const shownMode = shownState === "default" ? defaultMode : modes[shownState];
+  const previewDesign = designFor(shownState);
 
   // Inside Shopify admin, start from the cursor that's currently published to the store.
   useEffect(() => {
@@ -273,6 +284,8 @@ function CursorStudio() {
       setDesigns(published);
       setPublishedKey(designKeyOf(published, defaultMode, modes, trail)); setLiveStandard(false);
       showToast("Cursor published to your store");
+      // Publishing is the merchant's "it works" moment, so it's the right time to ask for a review.
+      requestReview();
     } catch (error) {
       showToast(`Publish failed: ${error instanceof Error ? error.message : String(error)}`, true);
     } finally {
@@ -311,13 +324,17 @@ function CursorStudio() {
           {activeState === "default" ? <ModePicker options={DEFAULT_MODE_OPTIONS} mode={defaultMode} onChange={setDefaultMode}/> : <ModePicker options={MODE_OPTIONS} mode={modes[activeState]} onChange={(next) => setMode(activeState, next)}/>}
           <div className="ml-auto flex gap-2 font-mono text-[9px] text-muted-foreground"><span>HOTSPOT {Math.round(current.hotspotX)},{Math.round(current.hotspotY)}</span><span>/</span><span>{current.size}px</span></div>
         </div>
-        {drawing ? <div className="cursor-grid flex flex-1 bg-workshop"><DrawPad color={current.color} onColorChange={(color) => updateDesign({ color })} onCancel={() => setDrawing(false)} onDone={(file) => handleUpload(file, { hotspotX: 0, hotspotY: 0 })}/></div> : <div ref={previewRef} className="cursor-grid relative flex-1 overflow-hidden bg-workshop" style={previewDesign ? undefined : { cursor: tab.systemCursor }} onPointerMove={(event) => { const box = event.currentTarget.getBoundingClientRect(); setCursorPosition({ x: ((event.clientX - box.left) / box.width) * 100, y: ((event.clientY - box.top) / box.height) * 100 }); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); handleUpload(event.dataTransfer.files[0]); }}>
-          <canvas ref={trailCanvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 size-full" />
-          {previewDesign ? <div className="pointer-events-none absolute -translate-x-[var(--hotspot-x)] -translate-y-[var(--hotspot-y)]" style={{ ...transform, "--hotspot-x": `${(previewDesign.hotspotX / Math.max(previewDesign.size, 1)) * 100}%`, "--hotspot-y": `${(previewDesign.hotspotY / Math.max(previewDesign.size, 1)) * 100}%` } as React.CSSProperties}>
-            <img src={previewDesign.image ?? svgDataUri(previewSvg ?? "")} alt={`${tab.label} cursor preview`} className="object-contain" style={{ width: previewDesign.size, height: previewDesign.size }} />
+        {drawing ? <div className="cursor-grid flex flex-1 bg-workshop"><DrawPad color={current.color} onColorChange={(color) => updateDesign({ color })} onCancel={() => setDrawing(false)} onDone={(file) => handleUpload(file, { hotspotX: 0, hotspotY: 0 })}/></div> : <div ref={previewRef} className="cursor-grid cursor-preview relative flex-1 overflow-hidden bg-workshop" style={{ cursor: previewDesign ? "none" : shownTab.systemCursor }} onPointerMove={(event) => { const box = event.currentTarget.getBoundingClientRect(); setCursorPosition({ x: ((event.clientX - box.left) / box.width) * 100, y: ((event.clientY - box.top) / box.height) * 100 }); setHoveredZone(((event.target as HTMLElement).closest<HTMLElement>("[data-cursor-zone]")?.dataset["cursorZone"] as StateTab | undefined) ?? "default"); }} onPointerLeave={() => setHoveredZone(null)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); handleUpload(event.dataTransfer.files[0]); }}>
+          {/* A mini storefront: hover each area to see the cursor shoppers get there; click one to edit that state. */}
+          <div className="absolute inset-0 grid place-items-center overflow-y-auto px-4 py-10"><div className="grid w-full max-w-xl grid-cols-2 gap-3">
+            {STATE_TABS.map((item) => <PreviewZone key={item.id} tab={item} active={activeState === item.id} standard={designFor(item.id) === null} onSelect={() => { setActiveState(item.id); setDrawing(false); }}/>)}
+          </div></div>
+          <canvas ref={trailCanvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 size-full" />
+          {previewDesign ? <div className="pointer-events-none absolute z-20 -translate-x-[var(--hotspot-x)] -translate-y-[var(--hotspot-y)]" style={{ ...transform, "--hotspot-x": `${(previewDesign.hotspotX / Math.max(previewDesign.size, 1)) * 100}%`, "--hotspot-y": `${(previewDesign.hotspotY / Math.max(previewDesign.size, 1)) * 100}%` } as React.CSSProperties}>
+            <img src={previewDesign.image ?? svgDataUri(previewSvg ?? "")} alt={`${shownTab.label} cursor preview`} className="object-contain" style={{ width: previewDesign.size, height: previewDesign.size }} />
             <span className="absolute left-0 top-0 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sun ring-2 ring-workshop" />
-          </div> : <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center font-mono text-[10px] uppercase text-muted-foreground">Standard {tab.label.toLowerCase()} cursor<br/>Pick a shape, color, upload or drawing to customize it</div>}
-          <div className="absolute left-4 top-3 font-mono text-[9px] uppercase text-muted-foreground">Live preview · {tab.label} · {tab.target}{mode === "match" ? ` · same as Default${defaultMode === "system" ? " (standard)" : ""}` : ""}</div><div className="absolute right-4 top-3 font-mono text-[9px] text-mint">● TRACKING</div><div className="absolute bottom-3 left-4 font-mono text-[9px] text-muted-foreground">DROP PNG / GIF / SVG · GRID 22</div>
+          </div> : null}
+          <div className="absolute left-4 top-3 font-mono text-[9px] uppercase text-muted-foreground">Live preview · hover each area · showing {shownTab.label} ({shownMode === "custom" ? "custom" : shownMode === "system" ? "standard" : `same as Default${defaultMode === "system" ? ", standard" : ""}`})</div><div className="absolute right-4 top-3 font-mono text-[9px] text-mint">● TRACKING</div><div className="absolute bottom-3 left-4 font-mono text-[9px] text-muted-foreground">DROP PNG / GIF / SVG · GRID 22</div>
         </div>}
         <div className="border-t border-border bg-panel px-4 py-3"><div className="flex items-center gap-2 overflow-x-auto"><span className="shrink-0 font-mono text-[9px] uppercase text-muted-foreground">Colors</span>{CURSOR_COLORS.map((swatch) => { const active = mode !== "system" && current.color.toLowerCase() === swatch.hex; return <Button key={swatch.hex} variant="panel" aria-pressed={active} onClick={() => selectColor(swatch.hex)} className={`shrink-0 ${active ? "ring-1 ring-sun" : ""}`}><span className="size-4 rounded-sm ring-1 ring-border" style={{ background: swatch.hex }}/>{swatch.name}</Button>; })}<label className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md bg-panel-raised px-3 text-sm font-semibold text-muted-foreground hover:text-foreground"><input aria-label="Custom cursor color" type="color" value={current.color} onChange={(event) => selectColor(event.target.value)} className="size-4 cursor-pointer border-0 bg-transparent p-0"/>Custom</label></div></div>
       </main>
@@ -343,6 +360,20 @@ function NumberInput({ label, value, setValue }: { label: string; value: number;
 function Segmented<T extends string | number>({ values, active, setActive }: { values: T[]; active: T; setActive: (value: T) => void }) { return <div className="inline-flex rounded-md bg-panel-raised p-1">{values.map((value) => <button key={value} onClick={() => setActive(value)} className={`h-7 min-w-12 rounded-md px-3 font-mono text-[10px] ${active === value ? "bg-sky font-bold text-ink" : "text-muted-foreground"}`}>{value}</button>)}</div>; }
 function ModePicker<T extends CursorStateMode>({ options, mode, onChange }: { options: Array<{ id: T; label: string }>; mode: T; onChange: (mode: T) => void }) {
   return <div className="inline-flex rounded-md bg-panel-raised p-1" role="radiogroup" aria-label="Cursor for this state">{options.map((option) => <button key={option.id} type="button" role="radio" aria-checked={mode === option.id} title={option.id === "match" ? "Use the Default cursor" : option.id === "system" ? "Use the normal system cursor" : "Design a separate cursor"} onClick={() => onChange(option.id)} className={`h-7 rounded-md px-2.5 font-mono text-[10px] ${mode === option.id ? "bg-sky font-bold text-ink" : "text-muted-foreground hover:text-foreground"}`}>{option.label}</button>)}</div>;
+}
+// Sample storefront content for each preview area, matching what each state targets on the store.
+const ZONE_MOCKS: Record<StateTab, React.ReactNode> = {
+  default: <><span className="h-2 w-4/5 rounded-full bg-muted-foreground/25"/><span className="h-2 w-3/5 rounded-full bg-muted-foreground/25"/><span className="h-2 w-2/3 rounded-full bg-muted-foreground/25"/></>,
+  pointer: <><span className="inline-flex h-8 w-fit items-center rounded-md bg-sun px-3 text-xs font-semibold text-ink">Add to cart</span><span className="text-xs text-sky underline">View details</span></>,
+  text: <span className="flex h-8 items-center rounded-md border border-border bg-workshop px-2.5 text-xs text-muted-foreground">Search products…<span className="ml-0.5 h-3.5 w-px animate-pulse bg-foreground"/></span>,
+  loading: <><span className="h-1.5 overflow-hidden rounded-full bg-panel-raised"><span className="block h-full w-1/2 animate-pulse rounded-full bg-primary"/></span><span className="text-xs text-muted-foreground">Next page loading…</span></>,
+};
+function PreviewZone({ tab, active, standard, onSelect }: { tab: (typeof STATE_TABS)[number]; active: boolean; standard: boolean; onSelect: () => void }) {
+  return <button type="button" data-cursor-zone={tab.id} aria-pressed={active} aria-label={`Edit the ${tab.label} cursor`} onClick={onSelect} className={`flex min-h-32 flex-col gap-3 rounded-lg border bg-panel/80 p-3 text-left transition sm:min-h-36 ${active ? "border-primary ring-1 ring-primary" : "border-border hover:border-muted-foreground/50"}`}>
+    <span className="flex items-baseline justify-between gap-2 font-mono text-[9px] uppercase"><span className={active ? "font-bold text-primary" : "text-muted-foreground"}>{tab.label}</span><span className="text-muted-foreground/70">{standard ? "standard" : "custom"}</span></span>
+    <span aria-hidden="true" className="flex flex-1 flex-col justify-center gap-2">{ZONE_MOCKS[tab.id]}</span>
+    <span className="font-mono text-[9px] text-muted-foreground">{tab.target}</span>
+  </button>;
 }
 function PublishButton({ publishing, onPublish, className = "" }: { publishing: boolean; onPublish: () => void; className?: string }) {
   return <Button variant="sun" className={className} disabled={publishing} onClick={onPublish}>{publishing ? <LoaderCircle size={15} className="animate-spin"/> : <CloudUpload size={15}/>}{publishing ? "Publishing…" : "Publish to store"}</Button>;

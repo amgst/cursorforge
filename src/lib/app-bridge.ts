@@ -7,6 +7,9 @@ declare global {
       toast: {
         show: (message: string, options?: { isError?: boolean; duration?: number }) => void;
       };
+      reviews?: {
+        request: () => Promise<{ success: boolean; code: string; message: string }>;
+      };
     };
   }
 }
@@ -24,6 +27,21 @@ export function currentShopDomain() {
 export async function getSessionToken() {
   if (!window.shopify) throw new Error("Open CursorForge from Shopify admin to publish.");
   return window.shopify.idToken();
+}
+
+let reviewRequested = false;
+
+/**
+ * Asks Shopify to show its native App Store review popup. Shopify decides whether it actually
+ * appears (it skips shops that already reviewed and limits how often it shows), so this is safe
+ * to call after any success. We only ask once per session and never block on the result.
+ */
+export function requestReview(delayMs = 2500) {
+  if (reviewRequested || typeof window === "undefined" || !window.shopify?.reviews) return;
+  reviewRequested = true;
+  window.setTimeout(() => {
+    window.shopify?.reviews?.request().catch(() => {});
+  }, delayMs);
 }
 
 export function showToast(message: string, isError = false) {

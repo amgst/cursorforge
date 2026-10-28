@@ -172,6 +172,8 @@
     background-image: radial-gradient(oklch(0.43 0.03 275 / 70%) 1.3px, transparent 1.3px);
     background-size: 22px 22px;
   }
+  /* The preview sets one cursor for the area under the pointer; its sample buttons and fields must not override it. */
+  .cursor-preview * { cursor: inherit !important; }
   .cursor-preview-shadow { filter: drop-shadow(6px 8px 3px oklch(0.08 0.01 275 / 55%)); }
   .scroll-slim { scrollbar-width: thin; scrollbar-color: var(--border) transparent; scrollbar-gutter: stable; }
   .scroll-slim::-webkit-scrollbar { width: 6px; }
