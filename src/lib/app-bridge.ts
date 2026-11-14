@@ -40,7 +40,9 @@ export function requestReview(delayMs = 2500) {
   if (reviewRequested || typeof window === "undefined" || !window.shopify?.reviews) return;
   reviewRequested = true;
   window.setTimeout(() => {
-    window.shopify?.reviews?.request().catch(() => {});
+    window.shopify?.reviews?.request()
+      .then((result) => { if (!result.success) console.info(`Review prompt not shown: ${result.code}`); })
+      .catch(() => {});
   }, delayMs);
 }
 

@@ -146,6 +146,9 @@ function CursorStudio() {
         const nextTrail: Trail = { style: config.trail_enabled ? config.trail_style : "off", length: config.trail_length, size: config.trail_size, color: config.trail_color };
         setDesigns(nextDesigns); setDefaultMode(config.default_mode); setModes(nextModes); setTrail(nextTrail); setDrawing(false);
         setPublishedKey(designKeyOf(nextDesigns, config.default_mode, nextModes, nextTrail)); setLiveStandard(!config.enabled);
+        // A returning merchant with a live custom cursor is past Shopify's 24-hour "recently installed" block,
+        // so ask here too; asking only after Publish misses merchants who publish in their first session.
+        if (config.enabled) requestReview(4000);
       })
       .catch((error: unknown) => showToast(`Couldn't load saved cursor: ${error instanceof Error ? error.message : String(error)}`, true));
     getSessionToken()
