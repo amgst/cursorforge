@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 // Public privacy policy, linked from the Shopify App Store listing.
 // Keep it in sync with what the app actually stores (see src/lib/cursor-config.functions.ts).
-const LAST_UPDATED = "September 29, 2026";
+const LAST_UPDATED = "November 16, 2026";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({ meta: [
@@ -30,28 +30,28 @@ function PrivacyPolicy() {
           <li><strong>Your cursor settings</strong>: shapes, colors, sizes, click points and trail options that you choose in the editor.</li>
           <li><strong>Cursor images you upload or draw</strong>. These are saved to your store's Files (Content → Files) with names starting with <code className="font-mono text-xs">cursorforge-</code>.</li>
         </ul>
-        <p className="mt-3">The app requests only the <code className="font-mono text-xs">write_files</code> permission, which it uses to save and delete those cursor images.</p>
+        <p className="mt-3">The app requests the <code className="font-mono text-xs">read_files</code> and <code className="font-mono text-xs">write_files</code> permissions to list, save and delete cursor images.</p>
       </Section>
 
       <Section title="Information the app does not collect">
-        CursorForge does not access or store customer information, orders, products, payment details or staff accounts. The cursor shown on your storefront does not track visitors, set cookies, or send any data from your shoppers' browsers to us.
+        CursorForge does not access or store customer information, orders, products, payment details or staff accounts. When activity measurement is configured, the desktop storefront embed sends a signed store-level signal that it loaded. This signal contains your store domain and an expiry time, with no visitor identifier, page URL, or cookies. Activity records contain only the store domain, first observed activity, latest app open, latest cursor publish, published cursor status, and latest storefront load. These records help us understand app adoption and troubleshoot setup; they do not measure unique visitors.
       </Section>
 
       <Section title="Where information is stored">
         <ul className="list-disc space-y-2 pl-5">
           <li>Your cursor settings are stored in your own Shopify store, in a data field that belongs to the app.</li>
           <li>Uploaded cursor images are stored in your store's Files.</li>
-          <li>CursorForge does not run its own database. The access token Shopify issues for your store is held only briefly in server memory while the app handles your requests.</li>
+          <li>When configured, store-level activity is stored in Upstash Redis and deleted after 90 days without recorded activity. The private activity dashboard is restricted to the app operator. Shopify access tokens are held only briefly in server memory.</li>
           <li>The app is hosted on Vercel, which may keep standard request logs (such as IP address and time of request) under its own privacy policy.</li>
         </ul>
       </Section>
 
       <Section title="Sharing">
-        We do not sell, rent or share your information with third parties, other than the hosting provider needed to run the app.
+        We do not sell or rent your information. Vercel provides hosting and, when activity measurement is configured, Upstash provides activity storage. Hosting infrastructure may process standard request metadata, including IP addresses, even though our activity database does not store them.
       </Section>
 
       <Section title="Uninstalling and deleting data">
-        When you uninstall CursorForge, Shopify removes the app's cursor settings from your store and the cursor no longer appears on your storefront. Cursor images you uploaded stay in your store's Files until you delete them, either from the app's My uploads panel or from Content → Files in your Shopify admin. The app responds to Shopify's customer data and shop data deletion requests; because it stores no customer data, there is nothing further to return or remove.
+        When you uninstall CursorForge, Shopify removes the app's cursor settings from your store and the cursor no longer appears on your storefront. Cursor images you uploaded stay in your store's Files until you delete them, either from the app's My uploads panel or from Content → Files in your Shopify admin. The app stores no customer data. Store-level activity is deleted when Shopify sends its shop data deletion webhook, or expires after 90 days without activity.
       </Section>
 
       <Section title="Changes to this policy">

@@ -10,6 +10,7 @@ import {
   type CursorImage,
 } from "@/lib/cursor-config";
 import { adminClientFromSessionToken, type AdminClient } from "@/lib/shopify-admin";
+import { recordActivitySafely, storefrontActivityUrl } from "@/lib/activity.server";
 
 type UserError = { field?: string[] | null; message: string };
 
@@ -40,6 +41,7 @@ export const loadCursorConfig = createServerFn({ method: "POST" })
     const admin = await adminClientFromSessionToken(data.idToken);
     const installation = await readInstallation(admin);
     const parsed = cursorConfigSchema.safeParse(installation.metafield?.jsonValue);
+    await recordActivitySafely(admin.shop, "opened", parsed.success ? parsed.data.enabled : undefined);
     return parsed.success ? parsed.data : null;
   });
 
@@ -64,12 +66,13 @@ export const saveCursorConfig = createServerFn({ method: "POST" })
             ownerId: installation.id,
             ...CURSOR_METAFIELD,
             type: "json",
-            value: JSON.stringify(data.config),
+            value: JSON.stringify({ ...data.config, activity_url: storefrontActivityUrl(admin.shop) }),
           },
         ],
       },
     );
     throwUserErrors(result.metafieldsSet.userErrors);
+    await recordActivitySafely(admin.shop, "published", data.config.enabled);
     return data.config;
   });
 

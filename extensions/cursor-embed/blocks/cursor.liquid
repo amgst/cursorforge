@@ -246,6 +246,15 @@
   }
 </style>
 <script>
+  {%- if saved.activity_url != blank and request.design_mode == false -%}
+  (function () {
+    if (!matchMedia('(pointer: fine)').matches || new URLSearchParams(location.search).has('preview_theme_id')) return;
+    // A store-level heartbeat only: no visitor identifier, cookies, or page URL.
+    fetch({{ saved.activity_url | json }}, {
+      mode: 'no-cors', credentials: 'omit', referrerPolicy: 'no-referrer', keepalive: true
+    }).catch(function () {});
+  })();
+  {%- endif -%}
   addEventListener('beforeunload', function () { document.documentElement.classList.add('cursorforge-busy'); });
   addEventListener('pageshow', function () { document.documentElement.classList.remove('cursorforge-busy'); });
 </script>
