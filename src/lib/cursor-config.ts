@@ -55,7 +55,7 @@ export const cursorConfigSchema = z.object({
   ...designShape,
   trail_enabled: z.boolean(),
   trail_length: z.number().int().min(3).max(20),
-  trail_style: z.enum(TRAIL_STYLES).default("dots"),
+  trail_style: z.enum(TRAIL_STYLES).default("sparkles"),
   trail_size: z.number().int().min(2).max(16).default(6),
   // null = match the cursor color.
   trail_color: hex.nullable().default(null),

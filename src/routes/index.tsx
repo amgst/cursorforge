@@ -53,7 +53,7 @@ function newDesign(): Design {
 function newDesigns(): Designs {
   return { default: newDesign(), pointer: newDesign(), text: newDesign(), loading: newDesign() };
 }
-const DEFAULT_TRAIL: Trail = { style: "dots", length: 8, size: 6, color: null };
+const DEFAULT_TRAIL: Trail = { style: "sparkles", length: 8, size: 6, color: null };
 function designFromSaved(saved: CursorDesign): Design {
   return { shapeId: getCursorShape(saved.shape).id, color: saved.color, size: saved.size, hotspotX: saved.hotspot_x, hotspotY: saved.hotspot_y, outline: saved.outline, shadow: saved.shadow, image: saved.image_url, file: null };
 }
@@ -249,7 +249,7 @@ function CursorStudio() {
     try {
       const config: CursorConfig = {
         enabled: false, default_mode: "custom", ...savedDesign(nextDesigns.default, null),
-        trail_enabled: false, trail_style: DEFAULT_TRAIL.style === "off" ? "dots" : DEFAULT_TRAIL.style, trail_length: DEFAULT_TRAIL.length, trail_size: DEFAULT_TRAIL.size, trail_color: null,
+        trail_enabled: false, trail_style: DEFAULT_TRAIL.style === "off" ? "sparkles" : DEFAULT_TRAIL.style, trail_length: DEFAULT_TRAIL.length, trail_size: DEFAULT_TRAIL.size, trail_color: null,
         states: Object.fromEntries(CURSOR_STATES.map((id) => [id, { mode: DEFAULT_STATE_MODES[id], design: null }])) as CursorConfig["states"],
       };
       await saveCursorConfig({ data: { idToken: await getSessionToken(), config } });
@@ -277,7 +277,7 @@ function CursorStudio() {
       const stateEntries = await Promise.all(CURSOR_STATES.map(async (id) => [id, { mode: modes[id], design: modes[id] === "custom" ? await toSaved(designs[id]) : null }] as const));
       const config: CursorConfig = {
         enabled: true, default_mode: defaultMode, ...(await toSaved(designs.default)),
-        trail_enabled: trail.style !== "off", trail_style: trail.style === "off" ? "dots" : trail.style,
+        trail_enabled: trail.style !== "off", trail_style: trail.style === "off" ? "sparkles" : trail.style,
         trail_length: trail.length, trail_size: trail.size, trail_color: trail.color,
         states: Object.fromEntries(stateEntries) as CursorConfig["states"],
       };

@@ -22,7 +22,7 @@
   function normalize(options) {
     options = options || {};
     return {
-      style: STYLES.indexOf(options.style) >= 0 ? options.style : "dots",
+      style: STYLES.indexOf(options.style) >= 0 ? options.style : "sparkles",
       color: /^#[0-9a-f]{6}$/i.test(options.color || "") ? options.color : "#f4511e",
       length: Math.round(clamp(options.length, 3, 20, 8)),
       size: Math.round(clamp(options.size, 2, 16, 6)),
