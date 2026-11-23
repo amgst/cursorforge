@@ -7,18 +7,22 @@ import { nitro } from "nitro/vite";
 import { defineConfig, type Plugin } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-// Serves the storefront trail engine to the editor as `virtual:cursorforge-trail`.
-// Importing it by path would request `/extensions/...` in dev, which the `shopify app dev`
+// Serves the storefront engines to the editor as `virtual:cursorforge-trail` and `virtual:cursorforge-effects`.
+// Importing them by path would request `/extensions/...` in dev, which the `shopify app dev`
 // proxy reserves for extension previews (it answers 404 and the editor fails to load).
-function cursorTrailModule(): Plugin {
-  const id = "virtual:cursorforge-trail";
-  const resolvedId = `\0${id}`;
-  const file = fileURLToPath(new URL("./extensions/cursor-embed/assets/cursorforge-trail.js", import.meta.url));
+function storefrontAssetModules(): Plugin {
+  const assets = new Map(
+    ["trail", "effects"].map((name) => [
+      `\0virtual:cursorforge-${name}`,
+      fileURLToPath(new URL(`./extensions/cursor-embed/assets/cursorforge-${name}.js`, import.meta.url)),
+    ]),
+  );
   return {
-    name: "cursorforge-trail",
-    resolveId: (source) => (source === id ? resolvedId : undefined),
+    name: "cursorforge-storefront-assets",
+    resolveId: (source) => (assets.has(`\0${source}`) ? `\0${source}` : undefined),
     load(loadId) {
-      if (loadId !== resolvedId) return undefined;
+      const file = assets.get(loadId);
+      if (!file) return undefined;
       this.addWatchFile(file);
       return readFileSync(file, "utf8");
     },
@@ -50,7 +54,7 @@ export default defineConfig(({ command }) => ({
     allowedHosts: true,
   },
   plugins: [
-    cursorTrailModule(),
+    storefrontAssetModules(),
     tailwindcss(),
     tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tanstackStart({

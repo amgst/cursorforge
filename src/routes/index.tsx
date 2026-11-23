@@ -1,14 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CloudUpload, Gift, LoaderCircle, Pencil, RotateCcw, ShieldCheck, Upload, X } from "lucide-react";
+import { CloudUpload, Gift, LoaderCircle, PartyPopper, Pencil, RotateCcw, ShieldCheck, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { DrawPad } from "@/components/draw-pad";
 import { SetupGuide } from "@/components/setup-guide";
 import { getSessionToken, isEmbeddedInAdmin, requestReview, showToast } from "@/lib/app-bridge";
 import {
-  CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_STATE_MODES, MULTICOLOR_TRAILS, TRAIL_STYLES,
-  type CursorConfig, type CursorDesign, type CursorImage, type CursorStateId, type CursorStateMode, type DefaultCursorMode, type TrailStyle,
+  CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_EFFECTS, DEFAULT_STATE_MODES, EFFECT_DEFAULT_COLORS, EFFECT_PAGES, EFFECT_STYLES, MULTICOLOR_EFFECTS, MULTICOLOR_TRAILS, TRAIL_STYLES,
+  type CursorConfig, type CursorDesign, type CursorEffects, type CursorImage, type CursorStateId, type CursorStateMode, type DefaultCursorMode, type EffectPage, type TrailStyle,
 } from "@/lib/cursor-config";
+import { createEffects, type EffectOptions, type EffectsInstance } from "@/lib/cursor-effects";
 import { deleteCursorImage, listCursorImages, loadCursorConfig, saveCursorConfig, uploadCursorImage } from "@/lib/cursor-config.functions";
 import { buildCursorSvg, CURSOR_COLORS, CURSOR_SHAPES, DEFAULT_SHAPE_ID, getCursorShape, HOLIDAY_LOOKS, SHAPE_CATEGORIES, shapeHotspot, svgDataUri, type HolidayLook } from "@/lib/cursor-presets";
 import { createTrail } from "@/lib/cursor-trail";
@@ -39,6 +40,7 @@ const MODE_OPTIONS: Array<{ id: CursorStateMode; label: string }> = [
   { id: "match", label: "Same as Default" }, { id: "system", label: "Standard cursor" }, { id: "custom", label: "Custom" },
 ];
 const DEFAULT_MODE_OPTIONS = MODE_OPTIONS.filter((option): option is { id: DefaultCursorMode; label: string } => option.id !== "match");
+const EFFECT_PAGE_LABELS: Record<EffectPage, string> = { index: "Home", product: "Product", collection: "Collection", cart: "Cart" };
 
 /** A cursor design being edited. `image` is a blob: URL until published, then a Shopify CDN URL. */
 interface Design { shapeId: string; color: string; size: number; hotspotX: number; hotspotY: number; outline: number; shadow: boolean; image: string | null; file: File | null }
@@ -69,9 +71,10 @@ function savedDesign(design: Design, imageUrl: string | null): CursorDesign {
 }
 
 /** Fingerprint of everything that gets published, for the Published / Unpublished changes badge. */
-function designKeyOf(designs: Designs, defaultMode: DefaultCursorMode, modes: Modes, trail: Trail) {
+function designKeyOf(designs: Designs, defaultMode: DefaultCursorMode, modes: Modes, trail: Trail, effects: CursorEffects) {
   const strip = (design: Design) => ({ ...design, file: undefined, hotspotX: Math.round(design.hotspotX), hotspotY: Math.round(design.hotspotY), color: design.color.toLowerCase() });
-  return JSON.stringify({ default: strip(designs.default), defaultMode, states: CURSOR_STATES.map((id) => [id, modes[id], modes[id] === "custom" ? strip(designs[id]) : null]), trail });
+  const effectsKey = { ...effects, color: effects.color?.toLowerCase() ?? null, pages: [...effects.pages].sort() };
+  return JSON.stringify({ default: strip(designs.default), defaultMode, states: CURSOR_STATES.map((id) => [id, modes[id], modes[id] === "custom" ? strip(designs[id]) : null]), trail, effects: effectsKey });
 }
 
 function readFileAsBase64(file: File) {
@@ -89,6 +92,9 @@ function CursorStudio() {
   const [defaultMode, setDefaultMode] = useState<DefaultCursorMode>("custom");
   const [modes, setModes] = useState<Modes>(DEFAULT_STATE_MODES);
   const [trail, setTrail] = useState<Trail>(DEFAULT_TRAIL);
+  const [effects, setEffects] = useState<CursorEffects>(DEFAULT_EFFECTS);
+  // Effects as last loaded from / published to the store. Reset to computer default keeps them.
+  const publishedEffectsRef = useRef<CursorEffects>(DEFAULT_EFFECTS);
   const [drawing, setDrawing] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 50, y: 48 });
   const [publishing, setPublishing] = useState(false);
@@ -100,6 +106,8 @@ function CursorStudio() {
   const [resetting, setResetting] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const trailCanvasRef = useRef<HTMLCanvasElement>(null);
+  const effectsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const effectsRef = useRef<EffectsInstance | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   // Cursor images already in the shop's Files (null while loading).
   const [library, setLibrary] = useState<CursorImage[] | null>(null);
@@ -144,8 +152,9 @@ function CursorStudio() {
           nextDesigns[id] = saved.design ? designFromSaved(saved.design) : { ...defaultDesign };
         }
         const nextTrail: Trail = { style: config.trail_enabled ? config.trail_style : "off", length: config.trail_length, size: config.trail_size, color: config.trail_color };
-        setDesigns(nextDesigns); setDefaultMode(config.default_mode); setModes(nextModes); setTrail(nextTrail); setDrawing(false);
-        setPublishedKey(designKeyOf(nextDesigns, config.default_mode, nextModes, nextTrail)); setLiveStandard(!config.enabled);
+        setDesigns(nextDesigns); setDefaultMode(config.default_mode); setModes(nextModes); setTrail(nextTrail); setEffects(config.effects); setDrawing(false);
+        publishedEffectsRef.current = config.effects;
+        setPublishedKey(designKeyOf(nextDesigns, config.default_mode, nextModes, nextTrail, config.effects)); setLiveStandard(!config.enabled);
         // A returning merchant with a live custom cursor is past Shopify's 24-hour "recently installed" block,
         // so ask here too; asking only after Publish misses merchants who publish in their first session.
         if (config.enabled) requestReview(4000);
@@ -158,7 +167,7 @@ function CursorStudio() {
     return () => { cancelled = true; };
   }, []);
 
-  const designKey = designKeyOf(designs, defaultMode, modes, trail);
+  const designKey = designKeyOf(designs, defaultMode, modes, trail, effects);
   const status: PublishState = !embedded ? "preview" : publishedKey === null ? "never" : publishedKey !== designKey ? "changed" : liveStandard ? "standard" : "published";
   const transform = useMemo(() => ({ left: `${cursorPosition.x}%`, top: `${cursorPosition.y}%` }), [cursorPosition]);
   // Shadow is baked into the SVG so the preview matches the storefront exactly.
@@ -171,6 +180,22 @@ function CursorStudio() {
     const trailInstance = createTrail(canvas, preview, trailOptions);
     return () => trailInstance?.destroy();
   }, [drawing, trailOptions]);
+  // Live effects preview using the same engine as the storefront, kept across option changes so
+  // flakes don't restart while a slider moves.
+  const effectOptions = useMemo<EffectOptions>(() => ({ style: effects.enabled ? effects.style : null, color: effects.color, density: effects.density, speed: effects.speed, size: effects.size }), [effects.enabled, effects.style, effects.color, effects.density, effects.speed, effects.size]);
+  const effectOptionsRef = useRef(effectOptions);
+  effectOptionsRef.current = effectOptions;
+  useEffect(() => {
+    const canvas = effectsCanvasRef.current;
+    if (!canvas) return;
+    const instance = createEffects(canvas, effectOptionsRef.current);
+    effectsRef.current = instance;
+    return () => { instance?.destroy(); effectsRef.current = null; };
+  }, [drawing]);
+  useEffect(() => { effectsRef.current?.update(effectOptions); }, [effectOptions]);
+  const updateEffects = (patch: Partial<CursorEffects>) => setEffects((prev) => ({ ...prev, ...patch }));
+  const toggleEffectPage = (page: EffectPage) => updateEffects({ pages: effects.pages.includes(page) ? effects.pages.filter((item) => item !== page) : [...effects.pages, page] });
+  const scheduleInvalid = !!effects.start_date && !!effects.end_date && effects.end_date < effects.start_date;
 
   /** Edits the active state's design. Editing a Match/Browser state turns it into a Custom copy of Default. */
   const updateDesign = (patch: Partial<Design>) => {
@@ -241,7 +266,8 @@ function CursorStudio() {
 
   /** Removes all customization: the store goes back to the visitor's normal computer cursor and the editor starts over. */
   const resetToComputerDefault = async () => {
-    if (!window.confirm("Remove your custom cursor and trail from the store and go back to the normal computer cursor? Your uploads stay in My uploads.")) return;
+    if (!window.confirm("Remove your custom cursor and trail from the store and go back to the normal computer cursor? Your uploads stay in My uploads, and published celebration effects stay on.")) return;
+    const keptEffects = publishedEffectsRef.current;
     const nextDesigns = newDesigns();
     const applyReset = () => { setDesigns(nextDesigns); setDefaultMode("custom"); setModes(DEFAULT_STATE_MODES); setTrail(DEFAULT_TRAIL); setDrawing(false); setActiveState("default"); };
     if (!embedded) { applyReset(); return; }
@@ -251,10 +277,11 @@ function CursorStudio() {
         enabled: false, default_mode: "custom", ...savedDesign(nextDesigns.default, null),
         trail_enabled: false, trail_style: DEFAULT_TRAIL.style === "off" ? "sparkles" : DEFAULT_TRAIL.style, trail_length: DEFAULT_TRAIL.length, trail_size: DEFAULT_TRAIL.size, trail_color: null,
         states: Object.fromEntries(CURSOR_STATES.map((id) => [id, { mode: DEFAULT_STATE_MODES[id], design: null }])) as CursorConfig["states"],
+        effects: keptEffects,
       };
       await saveCursorConfig({ data: { idToken: await getSessionToken(), config } });
       applyReset();
-      setPublishedKey(designKeyOf(nextDesigns, "custom", DEFAULT_STATE_MODES, DEFAULT_TRAIL)); setLiveStandard(true);
+      setPublishedKey(designKeyOf(nextDesigns, "custom", DEFAULT_STATE_MODES, DEFAULT_TRAIL, keptEffects)); setLiveStandard(true);
       showToast("Your store now uses the normal computer cursor");
     } catch (error) {
       showToast(`Reset failed: ${error instanceof Error ? error.message : String(error)}`, true);
@@ -265,6 +292,7 @@ function CursorStudio() {
 
   const publishToStore = async () => {
     if (!isEmbeddedInAdmin()) { window.alert("Open CursorForge from your Shopify admin to publish the cursor to your store."); return; }
+    if (scheduleInvalid) { showToast("The effect's end date is before its start date.", true); return; }
     setPublishing(true);
     try {
       // Reuses uploads already saved (or still saving) to Files, so each image is uploaded once.
@@ -280,8 +308,10 @@ function CursorStudio() {
         trail_enabled: trail.style !== "off", trail_style: trail.style === "off" ? "sparkles" : trail.style,
         trail_length: trail.length, trail_size: trail.size, trail_color: trail.color,
         states: Object.fromEntries(stateEntries) as CursorConfig["states"],
+        effects,
       };
       await saveCursorConfig({ data: { idToken: await getSessionToken(), config } });
+      publishedEffectsRef.current = effects;
 
       // Swap local previews for the uploaded CDN URLs so the next publish doesn't upload again.
       const uploaded = new Map<string, string>();
@@ -294,7 +324,7 @@ function CursorStudio() {
         return [id, url ? { ...design, image: url, file: null } : design];
       })) as Designs;
       setDesigns(published);
-      setPublishedKey(designKeyOf(published, defaultMode, modes, trail)); setLiveStandard(false);
+      setPublishedKey(designKeyOf(published, defaultMode, modes, trail, effects)); setLiveStandard(false);
       showToast("Cursor published to your store");
       // Publishing is the merchant's "it works" moment, so it's the right time to ask for a review.
       requestReview();
@@ -342,6 +372,7 @@ function CursorStudio() {
           <div className="absolute inset-0 grid place-items-center overflow-y-auto px-4 py-10"><div className="grid w-full max-w-xl grid-cols-2 gap-3">
             {STATE_TABS.map((item) => <PreviewZone key={item.id} tab={item} active={activeState === item.id} standard={designFor(item.id) === null} onSelect={() => { setActiveState(item.id); setDrawing(false); }}/>)}
           </div></div>
+          <canvas ref={effectsCanvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-[5] size-full" />
           <canvas ref={trailCanvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 size-full" />
           {previewDesign ? <div className="pointer-events-none absolute z-20 -translate-x-[var(--hotspot-x)] -translate-y-[var(--hotspot-y)]" style={{ ...transform, "--hotspot-x": `${(previewDesign.hotspotX / Math.max(previewDesign.size, 1)) * 100}%`, "--hotspot-y": `${(previewDesign.hotspotY / Math.max(previewDesign.size, 1)) * 100}%` } as React.CSSProperties}>
             <img src={previewDesign.image ?? svgDataUri(previewSvg ?? "")} alt={`${shownTab.label} cursor preview`} className="object-contain" style={{ width: previewDesign.size, height: previewDesign.size }} />
@@ -362,6 +393,18 @@ function CursorStudio() {
         <div className="mb-4 mt-6 border-t border-border pt-4 font-mono text-[10px] uppercase text-muted-foreground">Trail · all states</div>
         <Control label="Trail" value={trail.style} accent="text-primary"><div className="grid grid-cols-3 gap-1 rounded-md bg-panel-raised p-1">{(["off", ...TRAIL_STYLES] as const).map((style) => <button key={style} type="button" aria-pressed={trail.style === style} onClick={() => setTrail((prev) => ({ ...prev, style }))} className={`h-7 rounded-md px-2 font-mono text-[10px] capitalize ${trail.style === style ? "bg-primary font-bold text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{style}</button>)}</div></Control>
         {trail.style !== "off" ? <><Control label="Trail length" value={`${trail.length}`}><input aria-label="Trail length" type="range" min="3" max="20" value={trail.length} onChange={(event) => setTrail((prev) => ({ ...prev, length: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control><Control label="Trail size" value={`${trail.size} px`}><input aria-label="Trail size" type="range" min="2" max="16" value={trail.size} onChange={(event) => setTrail((prev) => ({ ...prev, size: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control>{MULTICOLOR_TRAILS.includes(trail.style) ? <p className="mb-5 text-xs text-muted-foreground">Festive sparkles are red, green, and gold.</p> : <Control label="Trail color" value={trail.color ?? "cursor"}><div className="flex items-center gap-2"><Segmented values={["Cursor", "Custom"]} active={trail.color ? "Custom" : "Cursor"} setActive={(value) => setTrail((prev) => ({ ...prev, color: value === "Custom" ? (prev.color ?? designs.default.color) : null }))}/>{trail.color ? <input aria-label="Trail color" type="color" value={trail.color} onChange={(event) => setTrail((prev) => ({ ...prev, color: event.target.value }))} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent p-0"/> : null}</div></Control>}</> : null}
+        <div className="mb-4 mt-6 flex items-center gap-1.5 border-t border-border pt-4 font-mono text-[10px] uppercase text-muted-foreground"><PartyPopper size={12}/>Celebration effects · whole store</div>
+        <Control label="Falling effect" value={effects.enabled ? effects.style : "off"} accent="text-primary"><div className="grid grid-cols-3 gap-1 rounded-md bg-panel-raised p-1">{(["off", ...EFFECT_STYLES] as const).map((style) => { const active = style === "off" ? !effects.enabled : effects.enabled && effects.style === style; return <button key={style} type="button" aria-pressed={active} onClick={() => updateEffects(style === "off" ? { enabled: false } : { enabled: true, style })} className={`h-7 rounded-md px-2 font-mono text-[10px] capitalize ${active ? "bg-primary font-bold text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{style}</button>; })}</div></Control>
+        {effects.enabled ? <>
+          <Control label="Amount" value={`${effects.density}`}><input aria-label="Effect amount" type="range" min="1" max="10" value={effects.density} onChange={(event) => updateEffects({ density: Number(event.target.value) })} className="w-full accent-[var(--primary)]"/></Control>
+          <Control label="Speed" value={`${effects.speed}`}><input aria-label="Effect speed" type="range" min="1" max="10" value={effects.speed} onChange={(event) => updateEffects({ speed: Number(event.target.value) })} className="w-full accent-[var(--primary)]"/></Control>
+          <Control label="Size" value={`${effects.size} px`}><input aria-label="Effect size" type="range" min="6" max="32" value={effects.size} onChange={(event) => updateEffects({ size: Number(event.target.value) })} className="w-full accent-[var(--primary)]"/></Control>
+          {MULTICOLOR_EFFECTS.includes(effects.style) ? <p className="mb-5 text-xs text-muted-foreground">{effects.style === "confetti" ? "Confetti uses a mix of bright colors." : "Leaves use autumn reds, oranges, and golds."}</p> : <Control label="Effect color" value={effects.color ?? "default"}><div className="flex items-center gap-2"><Segmented values={["Default", "Custom"]} active={effects.color ? "Custom" : "Default"} setActive={(value) => updateEffects({ color: value === "Custom" ? (effects.color ?? EFFECT_DEFAULT_COLORS[effects.style]) : null })}/>{effects.color ? <input aria-label="Effect color" type="color" value={effects.color} onChange={(event) => updateEffects({ color: event.target.value })} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent p-0"/> : null}</div></Control>}
+          <Control label="Show on" value={effects.pages.length ? `${effects.pages.length} page type${effects.pages.length > 1 ? "s" : ""}` : "all pages"}><div className="flex flex-wrap gap-1"><Chip active={effects.pages.length === 0} onClick={() => updateEffects({ pages: [] })}>All pages</Chip>{EFFECT_PAGES.map((page) => <Chip key={page} active={effects.pages.includes(page)} onClick={() => toggleEffectPage(page)}>{EFFECT_PAGE_LABELS[page]}</Chip>)}</div></Control>
+          <Control label="Schedule" value={effects.start_date || effects.end_date ? "dates set" : "always"}><div className="grid grid-cols-2 gap-2"><DateInput label="Start date" value={effects.start_date} setValue={(start_date) => updateEffects({ start_date })}/><DateInput label="End date" value={effects.end_date} setValue={(end_date) => updateEffects({ end_date })}/></div><p className={`mt-1.5 text-xs ${scheduleInvalid ? "text-holly" : "text-muted-foreground"}`}>{scheduleInvalid ? "End date is before the start date." : "Optional. Uses each shopper's local date, so a holiday effect can switch itself on and off."}</p></Control>
+        </> : null}
+        <Control label="Add-to-cart confetti" value={effects.cart_burst ? "on" : "off"} accent="text-mint"><div className="flex items-center gap-2"><Segmented values={["On", "Off"]} active={effects.cart_burst ? "On" : "Off"} setActive={(value) => updateEffects({ cart_burst: value === "On" })}/><Button variant="panel" onClick={() => effectsRef.current?.burst()} disabled={drawing} title="Show the burst in the preview">Preview</Button></div><p className="mt-1.5 text-xs text-muted-foreground">A confetti burst when a shopper adds a product to the cart, on every page.</p></Control>
+        <p className="mb-2 text-xs text-muted-foreground">Effects are skipped for shoppers who turn on reduced motion.</p>
         <div className="mt-6 border-t border-border pt-4"><Button variant="panel" className="mb-2 w-full" disabled={publishing || resetting || status === "standard"} onClick={() => void resetToComputerDefault()}>{resetting ? <LoaderCircle size={15} className="animate-spin"/> : <RotateCcw size={15}/>}Reset to computer default</Button><PublishButton publishing={publishing} onPublish={publishToStore} className="w-full"/><div className="mt-3 flex justify-center"><PublishStatus status={status}/></div></div>
       </aside>
     </div>
@@ -370,6 +413,8 @@ function CursorStudio() {
 
 function Control({ label, value, accent = "text-muted-foreground", children }: { label: string; value: string; accent?: string; children: React.ReactNode }) { return <div className="mb-5"><div className="mb-2 flex justify-between"><label className="text-sm font-medium">{label}</label><span className={`font-mono text-[10px] ${accent}`}>{value}</span></div>{children}</div>; }
 function NumberInput({ label, value, setValue }: { label: string; value: number; setValue: (value: number) => void }) { return <input aria-label={label} type="number" min="0" max="96" value={value} onChange={(event) => setValue(Number(event.target.value))} className="h-9 min-w-0 rounded-md border border-border bg-panel-raised px-2.5 font-mono text-sm text-foreground outline-none focus:border-sun"/>; }
+function DateInput({ label, value, setValue }: { label: string; value: string | null; setValue: (value: string | null) => void }) { return <input aria-label={label} title={label} type="date" value={value ?? ""} onChange={(event) => setValue(event.target.value || null)} className="h-9 min-w-0 rounded-md border border-border bg-panel-raised px-2 font-mono text-[11px] text-foreground outline-none [color-scheme:dark] focus:border-sun"/>; }
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <button type="button" aria-pressed={active} onClick={onClick} className={`h-7 rounded-md px-2.5 font-mono text-[10px] ${active ? "bg-sky font-bold text-ink" : "bg-panel-raised text-muted-foreground hover:text-foreground"}`}>{children}</button>; }
 function Segmented<T extends string | number>({ values, active, setActive }: { values: T[]; active: T; setActive: (value: T) => void }) { return <div className="inline-flex rounded-md bg-panel-raised p-1">{values.map((value) => <button key={value} onClick={() => setActive(value)} className={`h-7 min-w-12 rounded-md px-3 font-mono text-[10px] ${active === value ? "bg-sky font-bold text-ink" : "text-muted-foreground"}`}>{value}</button>)}</div>; }
 function ModePicker<T extends CursorStateMode>({ options, mode, onChange }: { options: Array<{ id: T; label: string }>; mode: T; onChange: (mode: T) => void }) {
   return <div className="inline-flex rounded-md bg-panel-raised p-1" role="radiogroup" aria-label="Cursor for this state">{options.map((option) => <button key={option.id} type="button" role="radio" aria-checked={mode === option.id} title={option.id === "match" ? "Use the Default cursor" : option.id === "system" ? "Use the normal system cursor" : "Design a separate cursor"} onClick={() => onChange(option.id)} className={`h-7 rounded-md px-2.5 font-mono text-[10px] ${mode === option.id ? "bg-sky font-bold text-ink" : "text-muted-foreground hover:text-foreground"}`}>{option.label}</button>)}</div>;

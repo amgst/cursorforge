@@ -20,7 +20,45 @@ export const DEFAULT_STATE_MODES: Record<CursorStateId, CursorStateMode> = {
   loading: "system",
 };
 
+// Saved in published configs, so only ever append. Keep in sync with STYLES in cursorforge-effects.js.
+export const EFFECT_STYLES = ["stars", "snow", "confetti", "hearts", "leaves"] as const;
+export type EffectStyle = (typeof EFFECT_STYLES)[number];
+/** Effects drawn in their own colors, so the effect color setting doesn't apply. */
+export const MULTICOLOR_EFFECTS: readonly EffectStyle[] = ["confetti", "leaves"];
+/** The color each effect uses when the merchant hasn't picked one. */
+export const EFFECT_DEFAULT_COLORS: Record<EffectStyle, string> = {
+  stars: "#f5c518", snow: "#ffffff", confetti: "#f4511e", hearts: "#e63950", leaves: "#d35400",
+};
+/** Theme template names (Liquid `template.name`) an effect can be limited to. */
+export const EFFECT_PAGES = ["index", "product", "collection", "cart"] as const;
+export type EffectPage = (typeof EFFECT_PAGES)[number];
+
 const hex = z.string().regex(/^#[0-9a-f]{6}$/i);
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+// Celebration effects over the whole storefront, independent of the cursor (they still show after
+// Reset to computer default). Defaults keep configs saved before effects existed valid.
+export const effectsSchema = z
+  .object({
+    // The falling effect. The cart burst has its own switch.
+    enabled: z.boolean().default(false),
+    style: z.enum(EFFECT_STYLES).default("stars"),
+    density: z.number().int().min(1).max(10).default(5),
+    speed: z.number().int().min(1).max(10).default(4),
+    size: z.number().int().min(6).max(32).default(14),
+    // null = the effect's own color (EFFECT_DEFAULT_COLORS).
+    color: hex.nullable().default(null),
+    // Empty = every page.
+    pages: z.array(z.enum(EFFECT_PAGES)).max(EFFECT_PAGES.length).default([]),
+    // Optional schedule in the visitor's local time, inclusive. null = no limit.
+    start_date: isoDate.nullable().default(null),
+    end_date: isoDate.nullable().default(null),
+    // Confetti from the bottom corners when a shopper adds something to the cart.
+    cart_burst: z.boolean().default(false),
+  })
+  .default({});
+export type CursorEffects = z.infer<typeof effectsSchema>;
+export const DEFAULT_EFFECTS: CursorEffects = effectsSchema.parse(undefined);
 
 // One cursor design. Liquid renders it from image_url, or from svg when there's no image.
 const designShape = {
@@ -66,6 +104,7 @@ export const cursorConfigSchema = z.object({
       loading: stateSchema(DEFAULT_STATE_MODES.loading),
     })
     .default({}),
+  effects: effectsSchema,
 });
 
 export type CursorConfig = z.infer<typeof cursorConfigSchema>;

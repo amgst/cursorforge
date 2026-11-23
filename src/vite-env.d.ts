@@ -10,5 +10,6 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
-// Storefront trail engine, served by the cursorTrailModule plugin in vite.config.ts.
+// Storefront trail and effects engines, served by the storefrontAssetModules plugin in vite.config.ts.
 declare module "virtual:cursorforge-trail";
+declare module "virtual:cursorforge-effects";

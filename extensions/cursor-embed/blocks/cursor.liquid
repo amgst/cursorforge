@@ -272,6 +272,35 @@
 {%- endif -%}
 {%- endunless -%}
 
+{%- comment -%} Celebration effects work on their own, even with the computer's default cursor. {%- endcomment -%}
+{%- assign effects = saved.effects -%}
+{%- liquid
+  assign effect_here = false
+  if effects.enabled
+    assign effect_here = true
+    if effects.pages.size > 0
+      unless effects.pages contains template.name
+        assign effect_here = false
+      endunless
+    endif
+  endif
+-%}
+{%- if effect_here or effects.cart_burst -%}
+  <div
+    id="cursorforge-effects"
+    hidden
+    {% if effect_here %}data-style="{{ effects.style | escape }}"{% endif %}
+    data-color="{{ effects.color | escape }}"
+    data-density="{{ effects.density }}"
+    data-speed="{{ effects.speed }}"
+    data-size="{{ effects.size }}"
+    data-start="{{ effects.start_date | escape }}"
+    data-end="{{ effects.end_date | escape }}"
+    data-cart-burst="{{ effects.cart_burst }}"
+  ></div>
+  <script src="{{ 'cursorforge-effects.js' | asset_url }}" defer></script>
+{%- endif -%}
+
 {% schema %}
 {
   "name": "CursorForge cursor",
@@ -279,7 +308,7 @@
   "settings": [
     {
       "type": "paragraph",
-      "content": "Design and publish your cursor in the CursorForge app (Apps → CursorForge). Until you publish one, a built-in arrow is shown. After Reset to computer default, the normal cursor is shown."
+      "content": "Design and publish your cursor and celebration effects in the CursorForge app (Apps → CursorForge). Until you publish a cursor, a built-in arrow is shown. After Reset to computer default, the normal cursor is shown."
     }
   ]
 }
