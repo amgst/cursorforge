@@ -3,7 +3,15 @@
 (function () {
   if (typeof window === "undefined") return;
 
-  var STYLES = ["dots", "comet", "sparkles", "bubbles"];
+  // Keep in sync with TRAIL_STYLES in src/lib/cursor-config.ts.
+  var STYLES = ["dots", "comet", "sparkles", "bubbles", "snow", "festive"];
+  // Styles that spawn particles as the pointer moves (the others draw a following chain).
+  var PARTICLE_STYLES = ["sparkles", "bubbles", "snow", "festive"];
+  var FESTIVE_COLORS = ["#d62839", "#1f8a4c", "#f5c518"];
+
+  function isParticle(style) {
+    return PARTICLE_STYLES.indexOf(style) >= 0;
+  }
 
   function clamp(value, min, max, fallback) {
     var number = Number(value);
@@ -33,6 +41,22 @@
     }
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSnowflake(ctx, x, y, radius, rotation) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    ctx.lineWidth = Math.max(1, radius / 3);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (var i = 0; i < 3; i++) {
+      var angle = (Math.PI / 3) * i;
+      ctx.moveTo(-Math.cos(angle) * radius, -Math.sin(angle) * radius);
+      ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -77,14 +101,18 @@
       var spacing = Math.max(4, opts.size * 1.2);
       if (distance < spacing) return;
       var steps = Math.min(Math.floor(distance / spacing), 4);
-      var life = 300 + opts.length * 40;
+      var life = (300 + opts.length * 40) * (opts.style === "snow" ? 1.6 : 1);
       for (var i = 1; i <= steps; i++) {
         var t = i / steps;
         particles.push({
           x: lastSpawn.x + dx * t,
           y: lastSpawn.y + dy * t,
           vx: (Math.random() - 0.5) * 0.06,
-          vy: opts.style === "bubbles" ? -0.02 - Math.random() * 0.03 : (Math.random() - 0.5) * 0.06,
+          vy: opts.style === "bubbles" ? -0.02 - Math.random() * 0.03
+            : opts.style === "snow" ? 0.02 + Math.random() * 0.03
+            : (Math.random() - 0.5) * 0.06,
+          phase: Math.random() * Math.PI * 2,
+          color: FESTIVE_COLORS[Math.floor(Math.random() * FESTIVE_COLORS.length)],
           rotation: Math.random() * Math.PI,
           spin: (Math.random() - 0.5) * 0.01,
           age: 0,
@@ -139,6 +167,11 @@
       ctx.fillStyle = opts.color;
       ctx.strokeStyle = opts.color;
       ctx.lineWidth = 1.5;
+      // A faint shadow keeps white snow visible on white pages.
+      if (opts.style === "snow") {
+        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+        ctx.shadowBlur = 2;
+      }
       for (var i = particles.length - 1; i >= 0; i--) {
         var particle = particles[i];
         particle.age += dt;
@@ -148,6 +181,8 @@
         }
         var remaining = 1 - particle.age / particle.life;
         particle.x += particle.vx * dt;
+        // Snow sways side to side as it falls.
+        if (opts.style === "snow") particle.x += Math.sin(particle.age / 180 + particle.phase) * 0.02 * dt;
         particle.y += particle.vy * dt;
         particle.rotation += particle.spin * dt;
         if (opts.style === "bubbles") {
@@ -155,11 +190,17 @@
           ctx.beginPath();
           ctx.arc(particle.x, particle.y, opts.size * (0.4 + (1 - remaining) * 1.2), 0, Math.PI * 2);
           ctx.stroke();
+        } else if (opts.style === "snow") {
+          ctx.globalAlpha = Math.min(1, remaining * 1.5);
+          drawSnowflake(ctx, particle.x, particle.y, opts.size * 0.6, particle.rotation);
         } else {
           ctx.globalAlpha = remaining;
+          if (opts.style === "festive") ctx.fillStyle = particle.color;
           drawSparkle(ctx, particle.x, particle.y, opts.size * (0.5 + 0.5 * remaining), particle.rotation);
         }
       }
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
       return particles.length > 0;
     }
 
@@ -167,7 +208,7 @@
       var dt = lastTime ? Math.min(time - lastTime, 50) : 16;
       lastTime = time;
       ctx.clearRect(0, 0, width, height);
-      var active = opts.style === "sparkles" || opts.style === "bubbles"
+      var active = isParticle(opts.style)
         ? drawParticles(dt)
         : pointer && chain.length ? drawChain(dt) : false;
       ctx.globalAlpha = 1;
@@ -195,7 +236,7 @@
       } else {
         pointer = point;
       }
-      if (opts.style === "sparkles" || opts.style === "bubbles") spawn(point);
+      if (isParticle(opts.style)) spawn(point);
       start();
     }
 

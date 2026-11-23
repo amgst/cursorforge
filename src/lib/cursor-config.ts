@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-export const TRAIL_STYLES = ["dots", "comet", "sparkles", "bubbles"] as const;
+// Saved in published configs, so only ever append. Keep in sync with STYLES in cursorforge-trail.js.
+export const TRAIL_STYLES = ["dots", "comet", "sparkles", "bubbles", "snow", "festive"] as const;
+/** Trails drawn in their own colors, so the trail color setting doesn't apply. */
+export const MULTICOLOR_TRAILS: readonly TrailStyle[] = ["festive"];
 export type TrailStyle = (typeof TRAIL_STYLES)[number];
 
 /** Cursor states besides Default. Each can match Default, use the browser's cursor, or be custom. */

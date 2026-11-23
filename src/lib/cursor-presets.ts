@@ -2,7 +2,8 @@
 // buildCursorSvg, so what merchants see in the editor is exactly what ships to the store.
 // All shapes are drawn on a 64×64 grid; `hotspot` is the click point on that grid.
 
-export const SHAPE_CATEGORIES = ["Pointers", "Shapes", "Fun"] as const;
+// Display order in the editor library. Holiday is listed first for the season.
+export const SHAPE_CATEGORIES = ["Holiday", "Pointers", "Shapes", "Fun"] as const;
 export type ShapeCategory = (typeof SHAPE_CATEGORIES)[number];
 
 export interface CursorShape {
@@ -16,6 +17,11 @@ export interface CursorShape {
 
 const filled = (d: string) => (fill: string, edge: string, w: number) =>
   `<path d='${d}' fill='${fill}'${w > 0 ? ` stroke='${edge}' stroke-width='${w}' stroke-linejoin='round'` : ""}/>`;
+
+// Like filled, but the outline goes underneath, so overlapping sub-shapes (a head on a body)
+// get one clean silhouette instead of an outline drawn across the join.
+const solid = (d: string) => (fill: string, edge: string, w: number) =>
+  `${w > 0 ? `<path d='${d}' fill='${edge}' stroke='${edge}' stroke-width='${w}' stroke-linejoin='round'/>` : ""}<path d='${d}' fill='${fill}'/>`;
 
 // Line-based shapes get an outline by drawing a wider stroke in the edge color underneath.
 const stroked = (markup: (color: string, width: number) => string, width: number) => (fill: string, edge: string, w: number) =>
@@ -37,6 +43,87 @@ function starPath(points: number, outer: number, inner: number, cx = 32, cy = 32
 
 // Shape ids are saved in published designs, so never rename or remove one.
 export const CURSOR_SHAPES: CursorShape[] = [
+  // Holiday. Details (stripes, eyes, buttons) use the edge color: white on dark cursors, ink on light ones.
+  { id: "xmas-tree", name: "Tree", category: "Holiday", hotspot: [32, 4], render: solid("M32 4 L46 22 H40 L52 38 H45 L57 52 H36 V60 H28 V52 H7 L19 38 H12 L24 22 H18Z") },
+  {
+    id: "candy-cane",
+    name: "Candy cane",
+    category: "Holiday",
+    hotspot: [34, 9],
+    render: (fill, edge, w) =>
+      stroked((c, sw) => `<path d='M24 58 V24 C24 9 44 9 44 24 V28' fill='none' stroke='${c}' stroke-width='${sw}' stroke-linecap='round'/>`, 8)(fill, edge, w) +
+      `<path d='M20 54 L28 48 M20 44 L28 38 M20 34 L28 28 M40 27 L48 21' stroke='${edge}' stroke-width='3'/>`,
+  },
+  {
+    id: "snowflake",
+    name: "Snowflake",
+    category: "Holiday",
+    hotspot: [32, 32],
+    render: stroked(
+      (c, sw) =>
+        [0, 60, 120, 180, 240, 300]
+          .map((angle) => `<path d='M32 32 V6 M25 12 L32 18 L39 12' transform='rotate(${angle} 32 32)' fill='none' stroke='${c}' stroke-width='${sw}' stroke-linecap='round' stroke-linejoin='round'/>`)
+          .join(""),
+      4,
+    ),
+  },
+  {
+    id: "gift",
+    name: "Gift",
+    category: "Holiday",
+    hotspot: [32, 12],
+    render: (fill, edge, w) =>
+      solid(`M8 26 H56 V36 H52 V58 H12 V36 H8Z${circle(25, 19, 6)}${circle(39, 19, 6)}`)(fill, edge, w) +
+      `<path d='M32 22 V58 M10 36 H54' stroke='${edge}' stroke-width='3'/>`,
+  },
+  {
+    id: "bell",
+    name: "Bell",
+    category: "Holiday",
+    hotspot: [32, 6],
+    render: solid(`M32 6 C20 6 14 16 14 30 V42 L8 50 H56 L50 42 V30 C50 16 44 6 32 6Z${circle(32, 54, 6)}`),
+  },
+  {
+    id: "santa-hat",
+    name: "Santa hat",
+    category: "Holiday",
+    hotspot: [53, 25],
+    // Red hat with white brim and pom-pom: the brim and pom swap fill and edge colors.
+    render: (fill, edge, w) =>
+      filled("M10 48 C12 28 22 10 40 10 C49 10 54 16 53 25 C47 21 41 23 39 30 L46 48Z")(fill, edge, w) +
+      filled(`M8 44 H48 A7 7 0 0 1 48 58 H8 A7 7 0 0 1 8 44Z${circle(53, 25, 7)}`)(edge, fill, Math.max(w, 1)),
+  },
+  {
+    id: "gingerbread",
+    // Soft hyphen lets the label wrap in the narrow library grid.
+    name: "Ginger­bread",
+    category: "Holiday",
+    hotspot: [32, 4],
+    render: (fill, edge, w) =>
+      solid(`${circle(32, 14, 10)}M22 22 H42 L55 30 C60 33 57 40 52 38 L44 35 L46 50 L52 57 C55 61 50 64 47 61 L38 53 H26 L17 61 C14 64 9 61 12 57 L18 50 L20 35 L12 38 C7 40 4 33 9 30Z`)(fill, edge, w) +
+      `<circle cx='28' cy='12' r='2' fill='${edge}'/><circle cx='36' cy='12' r='2' fill='${edge}'/><path d='M27 18 Q32 21 37 18' fill='none' stroke='${edge}' stroke-width='2' stroke-linecap='round'/>` +
+      `<circle cx='32' cy='31' r='2.5' fill='${edge}'/><circle cx='32' cy='41' r='2.5' fill='${edge}'/>`,
+  },
+  {
+    id: "ornament",
+    name: "Ornament",
+    category: "Holiday",
+    hotspot: [32, 3],
+    render: (fill, edge, w) =>
+      stroked((c, sw) => `<circle cx='32' cy='7' r='4' fill='none' stroke='${c}' stroke-width='${sw}'/>`, 2)(fill, edge, w) +
+      solid(`M26 11 H38 V19 H26Z${circle(32, 39, 21)}`)(fill, edge, w) +
+      `<path d='M13 34 Q32 42 51 34 M13 44 Q32 52 51 44' fill='none' stroke='${edge}' stroke-width='2.5'/>`,
+  },
+  {
+    id: "snowman",
+    name: "Snowman",
+    category: "Holiday",
+    hotspot: [32, 8],
+    render: (fill, edge, w) =>
+      solid(`${circle(32, 44, 16)}${circle(32, 20, 12)}`)(fill, edge, w) +
+      `<circle cx='27' cy='17' r='2' fill='${edge}'/><circle cx='37' cy='17' r='2' fill='${edge}'/><path d='M32 21 L40 23 L32 25Z' fill='#f4511e'/>` +
+      `<circle cx='32' cy='38' r='2.5' fill='${edge}'/><circle cx='32' cy='47' r='2.5' fill='${edge}'/>`,
+  },
   // Pointers
   { id: "arrow", name: "Arrow", category: "Pointers", hotspot: [8, 4], render: filled("M8 4 52 36 30 39 20 58Z") },
   { id: "classic", name: "Classic", category: "Pointers", hotspot: [12, 4], render: filled("M12 4 L12 50 L23 40 L31 58 L39 54 L31 37 L46 37Z") },
@@ -210,7 +297,26 @@ export const CURSOR_COLORS = [
   { name: "Rose", hex: "#ff4f8b" },
   { name: "Ink", hex: "#1f2330" },
   { name: "Snow", hex: "#ffffff" },
+  { name: "Holly", hex: "#d62839" },
+  { name: "Pine", hex: "#1f8a4c" },
+  { name: "Gold", hex: "#d4a017" },
 ] as const;
+
+/** One-click holiday looks: a Default cursor plus a trail, applied together in the editor. */
+export interface HolidayLook {
+  id: string;
+  name: string;
+  shapeId: string;
+  color: string;
+  trail: { style: "snow" | "festive" | "sparkles" | "dots"; color: string | null };
+}
+export const HOLIDAY_LOOKS: HolidayLook[] = [
+  { id: "candy-cane", name: "Candy cane", shapeId: "candy-cane", color: "#d62839", trail: { style: "snow", color: "#ffffff" } },
+  { id: "tree", name: "Christmas tree", shapeId: "xmas-tree", color: "#1f8a4c", trail: { style: "festive", color: null } },
+  { id: "snow-day", name: "Snow day", shapeId: "snowflake", color: "#2fb4f5", trail: { style: "snow", color: "#ffffff" } },
+  { id: "santa", name: "Santa hat", shapeId: "santa-hat", color: "#d62839", trail: { style: "sparkles", color: "#d4a017" } },
+  { id: "gingerbread", name: "Gingerbread", shapeId: "gingerbread", color: "#b5651d", trail: { style: "dots", color: "#d4a017" } },
+];
 
 export const DEFAULT_SHAPE_ID = "arrow";
 

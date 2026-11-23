@@ -1,16 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CloudUpload, LoaderCircle, Pencil, RotateCcw, ShieldCheck, Upload, X } from "lucide-react";
+import { CloudUpload, Gift, LoaderCircle, Pencil, RotateCcw, ShieldCheck, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { DrawPad } from "@/components/draw-pad";
 import { SetupGuide } from "@/components/setup-guide";
 import { getSessionToken, isEmbeddedInAdmin, requestReview, showToast } from "@/lib/app-bridge";
 import {
-  CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_STATE_MODES, TRAIL_STYLES,
+  CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_STATE_MODES, MULTICOLOR_TRAILS, TRAIL_STYLES,
   type CursorConfig, type CursorDesign, type CursorImage, type CursorStateId, type CursorStateMode, type DefaultCursorMode, type TrailStyle,
 } from "@/lib/cursor-config";
 import { deleteCursorImage, listCursorImages, loadCursorConfig, saveCursorConfig, uploadCursorImage } from "@/lib/cursor-config.functions";
-import { buildCursorSvg, CURSOR_COLORS, CURSOR_SHAPES, DEFAULT_SHAPE_ID, getCursorShape, SHAPE_CATEGORIES, shapeHotspot, svgDataUri } from "@/lib/cursor-presets";
+import { buildCursorSvg, CURSOR_COLORS, CURSOR_SHAPES, DEFAULT_SHAPE_ID, getCursorShape, HOLIDAY_LOOKS, SHAPE_CATEGORIES, shapeHotspot, svgDataUri, type HolidayLook } from "@/lib/cursor-presets";
 import { createTrail } from "@/lib/cursor-trail";
 
 export const Route = createFileRoute("/")({
@@ -188,6 +188,15 @@ function CursorStudio() {
     const [hotspotX, hotspotY] = shapeHotspot(shapeId, current.size);
     updateDesign({ shapeId, image: null, file: null, hotspotX, hotspotY }); setDrawing(false);
   };
+  /** Applies a holiday look: the Default cursor's shape and color plus a matching trail. Other settings are kept. */
+  const applyLook = (look: HolidayLook) => {
+    const [hotspotX, hotspotY] = shapeHotspot(look.shapeId, designs.default.size);
+    setActiveState("default"); setDefaultMode("custom"); setDrawing(false);
+    setDesigns((prev) => ({ ...prev, default: { ...prev.default, shapeId: look.shapeId, color: look.color, image: null, file: null, hotspotX, hotspotY } }));
+    setTrail((prev) => ({ ...prev, style: look.trail.style, color: look.trail.color }));
+  };
+  const lookActive = (look: HolidayLook) =>
+    defaultMode === "custom" && !designs.default.image && designs.default.shapeId === look.shapeId && designs.default.color.toLowerCase() === look.color && trail.style === look.trail.style && trail.color === look.trail.color;
   const selectColor = (color: string) => updateDesign(drawing ? { color } : { color, image: null, file: null });
   /** Uploads a local image to Shopify Files once; later calls for the same blob: URL reuse the upload. */
   const saveImage = (blobUrl: string, file: File) => {
@@ -327,6 +336,7 @@ function CursorStudio() {
           {activeState === "default" ? <ModePicker options={DEFAULT_MODE_OPTIONS} mode={defaultMode} onChange={setDefaultMode}/> : <ModePicker options={MODE_OPTIONS} mode={modes[activeState]} onChange={(next) => setMode(activeState, next)}/>}
           <div className="ml-auto flex gap-2 font-mono text-[9px] text-muted-foreground"><span>HOTSPOT {Math.round(current.hotspotX)},{Math.round(current.hotspotY)}</span><span>/</span><span>{current.size}px</span></div>
         </div>
+        {drawing ? null : <div className="flex items-center gap-2 overflow-x-auto border-b border-border bg-panel px-3 py-2" aria-label="Holiday looks"><span className="flex shrink-0 items-center gap-1.5 font-mono text-[9px] uppercase text-holly"><Gift size={12}/>Holiday looks</span>{HOLIDAY_LOOKS.map((look) => { const active = lookActive(look); return <button key={look.id} type="button" aria-pressed={active} title={`${look.name} cursor with a ${look.trail.style} trail`} onClick={() => applyLook(look)} className={`flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-panel-raised px-2.5 text-xs font-medium transition ${active ? "text-foreground ring-1 ring-sun" : "text-muted-foreground hover:text-foreground"}`}><img src={svgDataUri(buildCursorSvg(look.shapeId, { color: look.color, outline: 2, shadow: false, size: 20 }))} alt="" className="size-5"/>{look.name}</button>; })}</div>}
         {drawing ? <div className="cursor-grid flex flex-1 bg-workshop"><DrawPad color={current.color} onColorChange={(color) => updateDesign({ color })} onCancel={() => setDrawing(false)} onDone={(file) => handleUpload(file, { hotspotX: 0, hotspotY: 0 })}/></div> : <div ref={previewRef} className="cursor-grid cursor-preview relative flex-1 overflow-hidden bg-workshop" style={{ cursor: previewDesign ? "none" : shownTab.systemCursor }} onPointerMove={(event) => { const box = event.currentTarget.getBoundingClientRect(); setCursorPosition({ x: ((event.clientX - box.left) / box.width) * 100, y: ((event.clientY - box.top) / box.height) * 100 }); setHoveredZone(((event.target as HTMLElement).closest<HTMLElement>("[data-cursor-zone]")?.dataset["cursorZone"] as StateTab | undefined) ?? "default"); }} onPointerLeave={() => setHoveredZone(null)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); handleUpload(event.dataTransfer.files[0]); }}>
           {/* A mini storefront: hover each area to see the cursor shoppers get there; click one to edit that state. */}
           <div className="absolute inset-0 grid place-items-center overflow-y-auto px-4 py-10"><div className="grid w-full max-w-xl grid-cols-2 gap-3">
@@ -351,7 +361,7 @@ function CursorStudio() {
         <Control label="Shadow" value={current.shadow ? "soft" : "off"} accent="text-mint"><Segmented values={["On", "Off"]} active={current.shadow ? "On" : "Off"} setActive={(value) => updateDesign({ shadow: value === "On" })}/></Control>
         <div className="mb-4 mt-6 border-t border-border pt-4 font-mono text-[10px] uppercase text-muted-foreground">Trail · all states</div>
         <Control label="Trail" value={trail.style} accent="text-primary"><div className="grid grid-cols-3 gap-1 rounded-md bg-panel-raised p-1">{(["off", ...TRAIL_STYLES] as const).map((style) => <button key={style} type="button" aria-pressed={trail.style === style} onClick={() => setTrail((prev) => ({ ...prev, style }))} className={`h-7 rounded-md px-2 font-mono text-[10px] capitalize ${trail.style === style ? "bg-primary font-bold text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{style}</button>)}</div></Control>
-        {trail.style !== "off" ? <><Control label="Trail length" value={`${trail.length}`}><input aria-label="Trail length" type="range" min="3" max="20" value={trail.length} onChange={(event) => setTrail((prev) => ({ ...prev, length: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control><Control label="Trail size" value={`${trail.size} px`}><input aria-label="Trail size" type="range" min="2" max="16" value={trail.size} onChange={(event) => setTrail((prev) => ({ ...prev, size: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control><Control label="Trail color" value={trail.color ?? "cursor"}><div className="flex items-center gap-2"><Segmented values={["Cursor", "Custom"]} active={trail.color ? "Custom" : "Cursor"} setActive={(value) => setTrail((prev) => ({ ...prev, color: value === "Custom" ? (prev.color ?? designs.default.color) : null }))}/>{trail.color ? <input aria-label="Trail color" type="color" value={trail.color} onChange={(event) => setTrail((prev) => ({ ...prev, color: event.target.value }))} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent p-0"/> : null}</div></Control></> : null}
+        {trail.style !== "off" ? <><Control label="Trail length" value={`${trail.length}`}><input aria-label="Trail length" type="range" min="3" max="20" value={trail.length} onChange={(event) => setTrail((prev) => ({ ...prev, length: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control><Control label="Trail size" value={`${trail.size} px`}><input aria-label="Trail size" type="range" min="2" max="16" value={trail.size} onChange={(event) => setTrail((prev) => ({ ...prev, size: Number(event.target.value) }))} className="w-full accent-[var(--primary)]"/></Control>{MULTICOLOR_TRAILS.includes(trail.style) ? <p className="mb-5 text-xs text-muted-foreground">Festive sparkles are red, green, and gold.</p> : <Control label="Trail color" value={trail.color ?? "cursor"}><div className="flex items-center gap-2"><Segmented values={["Cursor", "Custom"]} active={trail.color ? "Custom" : "Cursor"} setActive={(value) => setTrail((prev) => ({ ...prev, color: value === "Custom" ? (prev.color ?? designs.default.color) : null }))}/>{trail.color ? <input aria-label="Trail color" type="color" value={trail.color} onChange={(event) => setTrail((prev) => ({ ...prev, color: event.target.value }))} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent p-0"/> : null}</div></Control>}</> : null}
         <div className="mt-6 border-t border-border pt-4"><Button variant="panel" className="mb-2 w-full" disabled={publishing || resetting || status === "standard"} onClick={() => void resetToComputerDefault()}>{resetting ? <LoaderCircle size={15} className="animate-spin"/> : <RotateCcw size={15}/>}Reset to computer default</Button><PublishButton publishing={publishing} onPublish={publishToStore} className="w-full"/><div className="mt-3 flex justify-center"><PublishStatus status={status}/></div></div>
       </aside>
     </div>

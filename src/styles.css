@@ -69,6 +69,7 @@
   --color-sun: var(--sun);
   --color-mint: var(--mint);
   --color-sky: var(--sky);
+  --color-holly: var(--holly);
   --color-overlay: var(--overlay);
 }
 
@@ -101,6 +102,7 @@
   --sun: oklch(0.83 0.17 86);
   --mint: oklch(0.77 0.16 162);
   --sky: oklch(0.73 0.15 235);
+  --holly: oklch(0.68 0.2 22);
   --overlay: oklch(0.08 0.01 275 / 72%);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
