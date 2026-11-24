@@ -12,6 +12,7 @@
   // Particles per density step on a 1280x800 viewport; scaled by the viewport's area.
   var PER_DENSITY = 6;
   var MAX_RATIO = 2;
+  var FADE_IN = 800;
 
   function clamp(value, min, max, fallback) {
     var number = Number(value);
@@ -119,8 +120,8 @@
       var fall = (0.015 + opts.speed * 0.011) * (0.7 + Math.random() * 0.6);
       return {
         x: Math.random() * width,
-        // At the start, spread flakes above the page so they drift in rather than appear at once.
-        y: anywhere ? -Math.random() * height : -opts.size * 2,
+        // At the start, spread flakes over the page (they fade in) so the effect shows right away.
+        y: anywhere ? Math.random() * height : -opts.size * 2,
         vy: opts.style === "snow" ? fall * 0.7 : opts.style === "leaves" ? fall * 0.8 : fall,
         size: opts.size * scale,
         sway: 0.2 + Math.random() * 0.8,
@@ -174,6 +175,7 @@
         if (flake.x < -flake.size * 2) flake.x = width + flake.size;
         else if (flake.x > width + flake.size * 2) flake.x = -flake.size;
         var alpha = opts.style === "stars" ? 0.65 + 0.35 * Math.sin(flake.age / 260 + flake.phase) : 0.9;
+        alpha *= Math.min(1, flake.age / FADE_IN);
         drawShape(opts.style, flake, alpha);
       }
       ctx.shadowColor = "transparent";
