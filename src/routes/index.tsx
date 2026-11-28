@@ -6,7 +6,7 @@ import { DrawPad } from "@/components/draw-pad";
 import { SetupGuide } from "@/components/setup-guide";
 import { getSessionToken, isEmbeddedInAdmin, requestReview, showToast } from "@/lib/app-bridge";
 import {
-  CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_EFFECTS, DEFAULT_STATE_MODES, EFFECT_DEFAULT_COLORS, EFFECT_PAGES, EFFECT_STYLES, MULTICOLOR_EFFECTS, MULTICOLOR_TRAILS, TRAIL_STYLES,
+  CURSOR_IMAGE_MAX_BYTES, CURSOR_IMAGE_TYPES, CURSOR_STATES, DEFAULT_EFFECTS, DEFAULT_STATE_MODES, STARTER_EFFECTS, EFFECT_DEFAULT_COLORS, EFFECT_PAGES, EFFECT_STYLES, MULTICOLOR_EFFECTS, MULTICOLOR_TRAILS, TRAIL_STYLES,
   type CursorConfig, type CursorDesign, type CursorEffects, type CursorImage, type CursorStateId, type CursorStateMode, type DefaultCursorMode, type EffectPage, type TrailStyle,
 } from "@/lib/cursor-config";
 import { createEffects, type EffectOptions, type EffectsInstance } from "@/lib/cursor-effects";
@@ -92,7 +92,7 @@ function CursorStudio() {
   const [defaultMode, setDefaultMode] = useState<DefaultCursorMode>("custom");
   const [modes, setModes] = useState<Modes>(DEFAULT_STATE_MODES);
   const [trail, setTrail] = useState<Trail>(DEFAULT_TRAIL);
-  const [effects, setEffects] = useState<CursorEffects>(DEFAULT_EFFECTS);
+  const [effects, setEffects] = useState<CursorEffects>(STARTER_EFFECTS);
   // Effects as last loaded from / published to the store. Reset to computer default keeps them.
   const publishedEffectsRef = useRef<CursorEffects>(DEFAULT_EFFECTS);
   const [drawing, setDrawing] = useState(false);

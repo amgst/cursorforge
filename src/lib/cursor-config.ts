@@ -59,6 +59,9 @@ export const effectsSchema = z
   .default({});
 export type CursorEffects = z.infer<typeof effectsSchema>;
 export const DEFAULT_EFFECTS: CursorEffects = effectsSchema.parse(undefined);
+/** What a merchant with nothing published yet starts from: an effect already picked. The schema
+ *  default stays off so configs saved before effects existed don't start showing one. */
+export const STARTER_EFFECTS: CursorEffects = { ...DEFAULT_EFFECTS, enabled: true, style: "snow" };
 
 // One cursor design. Liquid renders it from image_url, or from svg when there's no image.
 const designShape = {
